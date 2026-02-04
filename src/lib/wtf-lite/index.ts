@@ -40,6 +40,10 @@ export type {
 export { Link, Sentence } from './links.js'
 export { Document, Section, Paragraph, Infobox, List } from './classes.js'
 
+// Fast mode for snippets (5ms CPU limit)
+export { fastParse } from './fast.js'
+export type { FastDocument } from './fast.js'
+
 // ============================================================================
 // CDN DATA LOADING
 // ============================================================================

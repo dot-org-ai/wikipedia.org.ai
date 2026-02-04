@@ -9,17 +9,24 @@ export const trim = (s: string): string => (s || '').replace(/^\s+|\s+$/g, '').r
 
 /**
  * Preprocess wiki markup - remove comments, special tags, etc.
+ * Optimized to minimize string operations
  */
 export function preProcess(wiki: string): string {
-  // ReDoS fix: Use negated character class instead of [\s\S]{0,3000}? to prevent backtracking
-  wiki = wiki.replace(/<!--(?:[^-]|-(?!->)){0,3000}-->/g, '')
-  wiki = wiki.replace(/__(NOTOC|NOEDITSECTION|FORCETOC|TOC)__/gi, '')
-  wiki = wiki.replace(/~{2,3}/g, '').replace(/\r/g, '').replace(/\u3002/g, '. ').replace(/----/g, '')
-  wiki = wiki.replace(/&nbsp;/g, ' ').replace(/&ndash;/g, '-').replace(/&mdash;/g, '-')
-  wiki = wiki.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+  // Combine simple replacements into single pass using replaceAll where possible
+  wiki = wiki
+    .replace(/<!--(?:[^-]|-(?!->)){0,3000}-->/g, '')  // HTML comments
+    .replace(/__(NOTOC|NOEDITSECTION|FORCETOC|TOC)__/gi, '')  // Magic words
+    .replace(/~{2,3}|\r|----/g, '')  // Signatures, CR, horizontal rules
+    .replace(/\u3002/g, '. ')  // CJK period
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&ndash;|&mdash;/g, '-')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
 
-  // Strip [[File:...]], [[Image:...]] and i18n variants (handles nested brackets)
+  // Strip [[File:...]], [[Image:...]] - single pass collecting positions
   const fileNsReg = new RegExp(`\\[\\[(${FILE_NS_PREFIXES.join('|')}):`, 'gi')
+  const filePositions: { start: number; end: number }[] = []
   let match
   while ((match = fileNsReg.exec(wiki)) !== null) {
     const startIdx = match.index
@@ -29,38 +36,66 @@ export function preProcess(wiki: string): string {
       else if (wiki[i] === ']' && wiki[i + 1] === ']') { depth--; i++; if (depth === 0) { endIdx = i + 1; break } }
     }
     if (endIdx > startIdx) {
-      wiki = wiki.slice(0, startIdx) + wiki.slice(endIdx)
-      fileNsReg.lastIndex = startIdx
+      filePositions.push({ start: startIdx, end: endIdx })
+      fileNsReg.lastIndex = endIdx  // Continue from end instead of resetting
     }
   }
+  // Strip all file links in one pass
+  if (filePositions.length > 0) {
+    wiki = stripTemplates(wiki, filePositions)
+  }
 
-  // ReDoS fix: Use negated character class with controlled lookahead instead of [\s\S]+?
-  wiki = wiki.replace(new RegExp(`< ?(${IGNORE_TAGS.join('|')}) ?[^>]{0,200}>(?:[^<]|<(?!\\s?/\\s?(${IGNORE_TAGS.join('|')})\\s?>))+< ?/ ?(${IGNORE_TAGS.join('|')}) ?>`, 'gi'), ' ')
-  wiki = wiki.replace(/ ?< ?(span|div|table|data) [a-zA-Z0-9=%.\-#:;'" ]{2,100}\/? ?> ?/g, ' ')
-  // ReDoS fix: Use negated character class [^<]* instead of .*? to prevent backtracking
-  wiki = wiki.replace(/<i>([^<]*(?:<(?!\/i>)[^<]*)*)<\/i>/g, "''$1''").replace(/<b>([^<]*(?:<(?!\/b>)[^<]*)*)<\/b>/g, "'''$1'''")
-  wiki = wiki.replace(/ ?<[ /]?(p|sub|sup|span|nowiki|div|table|br|tr|td|th|pre|hr|u)[ /]?> ?/g, ' ')
-  wiki = wiki.replace(/ ?< ?br ?\/> ?/g, '\n').replace(/\([,;: ]+\)/g, '')
+  // HTML tag cleanup
+  wiki = wiki
+    .replace(new RegExp(`< ?(${IGNORE_TAGS.join('|')}) ?[^>]{0,200}>(?:[^<]|<(?!\\s?/\\s?(${IGNORE_TAGS.join('|')})\\s?>))+< ?/ ?(${IGNORE_TAGS.join('|')}) ?>`, 'gi'), ' ')
+    .replace(/ ?< ?(span|div|table|data) [a-zA-Z0-9=%.\-#:;'" ]{2,100}\/? ?> ?/g, ' ')
+    .replace(/<i>([^<]*(?:<(?!\/i>)[^<]*)*)<\/i>/g, "''$1''")
+    .replace(/<b>([^<]*(?:<(?!\/b>)[^<]*)*)<\/b>/g, "'''$1'''")
+    .replace(/ ?<[ /]?(p|sub|sup|span|nowiki|div|table|br|tr|td|th|pre|hr|u)[ /]?> ?/g, ' ')
+    .replace(/ ?< ?br ?\/> ?/g, '\n')
+    .replace(/\([,;: ]+\)/g, '')
+
   return wiki.trim()
 }
 
 /**
- * Find all templates in wiki markup
+ * Find all templates in wiki markup with positions for efficient removal
  */
-export function findTemplates(wiki: string): { body: string; name: string }[] {
-  const list: string[] = []
-  let depth = 0, carry: string[] = []
+export function findTemplates(wiki: string): { body: string; name: string; start: number; end: number }[] {
+  const list: { body: string; start: number; end: number }[] = []
+  let depth = 0, carry: string[] = [], startIdx = 0
   for (let i = wiki.indexOf('{'); i !== -1 && i < wiki.length; depth > 0 ? i++ : (i = wiki.indexOf('{', i + 1))) {
     const c = wiki[i]
     if (c === undefined) continue
-    if (c === '{') depth++
+    if (c === '{') { if (depth === 0) startIdx = i; depth++ }
     if (depth > 0) {
-      if (c === '}') { depth--; if (depth === 0) { carry.push(c); const t = carry.join(''); carry = []; if (/\{\{/.test(t) && /\}\}/.test(t)) list.push(t); continue } }
+      if (c === '}') { depth--; if (depth === 0) { carry.push(c); const t = carry.join(''); carry = []; if (/\{\{/.test(t) && /\}\}/.test(t)) list.push({ body: t, start: startIdx, end: i + 1 }); continue } }
       if (depth === 1 && c !== '{' && c !== '}') { depth = 0; carry = []; continue }
       carry.push(c)
     }
   }
-  return list.map(body => ({ body, name: getTemplateName(body) }))
+  return list.map(t => ({ ...t, name: getTemplateName(t.body) }))
+}
+
+/**
+ * Remove templates from text in a single pass (O(n) instead of O(n*m))
+ */
+export function stripTemplates(wiki: string, templates: { start: number; end: number }[]): string {
+  if (templates.length === 0) return wiki
+  // Sort by start position
+  const sorted = [...templates].sort((a, b) => a.start - b.start)
+  const parts: string[] = []
+  let lastEnd = 0
+  for (const t of sorted) {
+    if (t.start > lastEnd) {
+      parts.push(wiki.slice(lastEnd, t.start))
+    }
+    lastEnd = Math.max(lastEnd, t.end)
+  }
+  if (lastEnd < wiki.length) {
+    parts.push(wiki.slice(lastEnd))
+  }
+  return parts.join('')
 }
 
 /**

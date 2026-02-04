@@ -115,15 +115,22 @@ export function splitSentences(text: string): string[] {
 
 export function parseSentence(str: string): Sentence {
   const obj: SentenceData = { text: str }
+  // Early exit optimizations
+  const hasLinks = str.includes('[')
+  const hasBold = str.includes("'''")
+  const hasItalic = str.includes("''")
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getLinks(obj as any)
+  if (hasLinks) getLinks(obj as any)
   obj.text = trim(obj.text || '').replace(/\([,;: ]*\)/g, '').replace(/ +\.$/, '.')
-  // Bold/italic
-  // ReDoS fix: Use negated character class [^']* instead of .{0,2500}?
-  const bolds: string[] = [], italics: string[] = []
-  obj.text = obj.text.replace(/'''''([^']{0,2500}|'(?!')){0,2500}'''''/g, (_, b) => { bolds.push(b); italics.push(b); return b })
-  obj.text = obj.text.replace(/'''([^']{0,2500}|'(?!')|''(?!')){0,2500}'''/g, (_, b) => { bolds.push(b); return b })
-  obj.text = obj.text.replace(/''([^']{0,2500}|'(?!')){0,2500}''/g, (_, b) => { italics.push(b); return b })
-  if (bolds.length || italics.length) obj.fmt = { bold: bolds.length ? bolds : undefined, italic: italics.length ? italics : undefined }
+
+  // Bold/italic - skip if no markers present
+  if (hasBold || hasItalic) {
+    const bolds: string[] = [], italics: string[] = []
+    obj.text = obj.text.replace(/'''''([^']{0,2500}|'(?!')){0,2500}'''''/g, (_, b) => { bolds.push(b); italics.push(b); return b })
+    obj.text = obj.text.replace(/'''([^']{0,2500}|'(?!')|''(?!')){0,2500}'''/g, (_, b) => { bolds.push(b); return b })
+    obj.text = obj.text.replace(/''([^']{0,2500}|'(?!')){0,2500}''/g, (_, b) => { italics.push(b); return b })
+    if (bolds.length || italics.length) obj.fmt = { bold: bolds.length ? bolds : undefined, italic: italics.length ? italics : undefined }
+  }
   return new Sentence(obj)
 }

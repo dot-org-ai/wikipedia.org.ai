@@ -372,6 +372,8 @@ function parseListItems_simple(tmpl: string): string[] {
  */
 export function parseDateTemplatesInValue(value: string): string {
   if (!value || typeof value !== 'string') return value
+  // Early exit: if no {{ then no templates to process
+  if (!value.includes('{{')) return value
 
   const templates = findTemplates(value)
   for (const tmpl of templates) {

@@ -8,7 +8,7 @@ import {
   DATA, CATEGORIES, INFOBOXES, REDIRECTS, MONTHS, DAYS, CURRENCY,
   REF_SECTION_NAMES
 } from './constants'
-import { preProcess, trim, findTemplates } from './utils'
+import { preProcess, trim, findTemplates, stripTemplates } from './utils'
 import {
   parseTemplateParams,
   parseBirthDate, parseDeathDate, parseStartDate, parseAsOf,
@@ -145,9 +145,15 @@ export class Section {
     const templates = findTemplates(this._wiki)
     const infos = DATA?.infoboxes || INFOBOXES
     const infoReg = new RegExp('^(subst.)?(' + infos.join('|') + ')(?=:| |\\n|$)', 'i')
+    const hardcoded = DATA?.hardcoded || {}
+    const pronouns = DATA?.pronouns || ['they', 'them', 'their', 'theirs', 'themself']
+
+    // Collect replacements: { start, end, replacement }
+    const replacements: { start: number; end: number; text: string }[] = []
 
     for (const tmpl of templates) {
       const name = tmpl.name.toLowerCase()
+      let replacement = ''
 
       if (infoReg.test(name) || /^infobox /i.test(name) || / infobox$/i.test(name)) {
         const obj = parseTemplateParams(tmpl.body, 'raw')
@@ -156,148 +162,86 @@ export class Section {
         if (m?.[0]) type = type.replace(m[0], '').trim()
         delete obj['template']; delete obj['list']
         this._infoboxes.push(new Infobox({ type, data: obj as Record<string, Sentence> }))
-        this._wiki = this._wiki.replace(tmpl.body, '')
-        continue
-      }
-
-      if (name === 'coord' || name.startsWith('coor')) {
+      } else if (name === 'coord' || name.startsWith('coor')) {
         const coord = parseCoord(tmpl.body)
         if (coord.lat && coord.lon) {
           this._coordinates.push({ lat: coord.lat, lon: coord.lon })
           this._templates.push(coord)
           const display = coord.display || 'inline'
           if (display.includes('inline')) {
-            this._wiki = this._wiki.replace(tmpl.body, `${coord.lat}°${coord.latDir}, ${coord.lon}°${coord.lonDir}`)
-          } else {
-            this._wiki = this._wiki.replace(tmpl.body, '')
+            replacement = `${coord.lat}°${coord.latDir}, ${coord.lon}°${coord.lonDir}`
           }
         }
-        continue
-      }
-
-      if (name === 'birth date and age' || name === 'bda' || name === 'birth date') {
-        const text = parseBirthDate(tmpl.body, this._templates)
-        this._wiki = this._wiki.replace(tmpl.body, text)
-        continue
-      }
-      if (name === 'death date and age' || name === 'death date') {
-        const text = parseDeathDate(tmpl.body, this._templates)
-        this._wiki = this._wiki.replace(tmpl.body, text)
-        continue
-      }
-      if (name === 'start date' || name === 'end date' || name === 'start' || name === 'end') {
-        const text = parseStartDate(tmpl.body, this._templates)
-        this._wiki = this._wiki.replace(tmpl.body, text)
-        continue
-      }
-      if (name === 'currentday' || name === 'localday') {
-        this._wiki = this._wiki.replace(tmpl.body, String(new Date().getDate()))
-        continue
-      }
-      if (name === 'currentmonth' || name === 'currentmonthname' || name === 'localmonth') {
-        this._wiki = this._wiki.replace(tmpl.body, MONTHS[new Date().getMonth()] ?? '')
-        continue
-      }
-      if (name === 'currentyear' || name === 'localyear') {
-        this._wiki = this._wiki.replace(tmpl.body, String(new Date().getFullYear()))
-        continue
-      }
-      if (name === 'currentdayname' || name === 'localdayname') {
-        this._wiki = this._wiki.replace(tmpl.body, DAYS[new Date().getDay()] ?? '')
-        continue
-      }
-      if (name === 'as of') {
-        const text = parseAsOf(tmpl.body)
-        this._wiki = this._wiki.replace(tmpl.body, text)
-        continue
-      }
-
-      if (CURRENCY[name] || name === 'currency') {
-        const text = parseCurrency(tmpl.body)
-        this._wiki = this._wiki.replace(tmpl.body, text)
-        continue
-      }
-
-      if (name === 'goal') {
-        const text = parseGoal(tmpl.body, this._templates)
-        this._wiki = this._wiki.replace(tmpl.body, text)
-        continue
-      }
-      if (name === 'player') {
-        const text = parsePlayer(tmpl.body, this._templates)
-        this._wiki = this._wiki.replace(tmpl.body, text)
-        continue
-      }
-      if (name === 'sports table') {
+      } else if (name === 'birth date and age' || name === 'bda' || name === 'birth date') {
+        replacement = parseBirthDate(tmpl.body, this._templates)
+      } else if (name === 'death date and age' || name === 'death date') {
+        replacement = parseDeathDate(tmpl.body, this._templates)
+      } else if (name === 'start date' || name === 'end date' || name === 'start' || name === 'end') {
+        replacement = parseStartDate(tmpl.body, this._templates)
+      } else if (name === 'currentday' || name === 'localday') {
+        replacement = String(new Date().getDate())
+      } else if (name === 'currentmonth' || name === 'currentmonthname' || name === 'localmonth') {
+        replacement = MONTHS[new Date().getMonth()] ?? ''
+      } else if (name === 'currentyear' || name === 'localyear') {
+        replacement = String(new Date().getFullYear())
+      } else if (name === 'currentdayname' || name === 'localdayname') {
+        replacement = DAYS[new Date().getDay()] ?? ''
+      } else if (name === 'as of') {
+        replacement = parseAsOf(tmpl.body)
+      } else if (CURRENCY[name] || name === 'currency') {
+        replacement = parseCurrency(tmpl.body)
+      } else if (name === 'goal') {
+        replacement = parseGoal(tmpl.body, this._templates)
+      } else if (name === 'player') {
+        replacement = parsePlayer(tmpl.body, this._templates)
+      } else if (name === 'sports table') {
         parseSportsTable(tmpl.body, this._templates)
-        this._wiki = this._wiki.replace(tmpl.body, '')
-        continue
-      }
-      if (name === '4teambracket' || name.includes('teambracket')) {
+      } else if (name === '4teambracket' || name.includes('teambracket')) {
         parsePlayoffBracket(tmpl.body, this._templates)
-        this._wiki = this._wiki.replace(tmpl.body, '')
-        continue
+      } else if (name === 'convert' || name === 'cvt') {
+        replacement = parseConvert(tmpl.body)
+      } else if (name === 'fraction' || name === 'frac') {
+        replacement = parseFraction(tmpl.body)
+      } else if (name === 'val') {
+        replacement = parseVal(tmpl.body)
+      } else if (name === 'sortname') {
+        replacement = parseSortname(tmpl.body)
+      } else if (name === 'hlist' || name === 'plainlist' || name === 'flatlist') {
+        replacement = parseHorizontalList(tmpl.body)
+      } else if (name === 'ubl' || name === 'ubil' || name === 'unbulleted list') {
+        replacement = parseUnbulletedList(tmpl.body)
+      } else if (name === 'bulleted list') {
+        replacement = parseBulletedList(tmpl.body)
+      } else if (name === 'url') {
+        replacement = parseURL(tmpl.body)
+      } else if (name === 'nihongo' || name === 'nihongo2' || name === 'nihongo3' || name === 'nihongo-s' || name === 'nihongo foot') {
+        replacement = parseNihongo(tmpl.body)
+      } else if (hardcoded[name]) {
+        replacement = hardcoded[name]
+      } else if (pronouns.includes(name)) {
+        replacement = name
       }
+      // All other templates: replacement stays ''
 
-      if (name === 'convert' || name === 'cvt') {
-        const text = parseConvert(tmpl.body)
-        this._wiki = this._wiki.replace(tmpl.body, text)
-        continue
-      }
-      if (name === 'fraction' || name === 'frac') {
-        const text = parseFraction(tmpl.body)
-        this._wiki = this._wiki.replace(tmpl.body, text)
-        continue
-      }
-      if (name === 'val') {
-        const text = parseVal(tmpl.body)
-        this._wiki = this._wiki.replace(tmpl.body, text)
-        continue
-      }
-      if (name === 'sortname') {
-        const text = parseSortname(tmpl.body)
-        this._wiki = this._wiki.replace(tmpl.body, text)
-        continue
-      }
-      if (name === 'hlist' || name === 'plainlist' || name === 'flatlist') {
-        const text = parseHorizontalList(tmpl.body)
-        this._wiki = this._wiki.replace(tmpl.body, text)
-        continue
-      }
-      if (name === 'ubl' || name === 'ubil' || name === 'unbulleted list') {
-        const text = parseUnbulletedList(tmpl.body)
-        this._wiki = this._wiki.replace(tmpl.body, text)
-        continue
-      }
-      if (name === 'bulleted list') {
-        const text = parseBulletedList(tmpl.body)
-        this._wiki = this._wiki.replace(tmpl.body, text)
-        continue
-      }
-      if (name === 'url') {
-        const text = parseURL(tmpl.body)
-        this._wiki = this._wiki.replace(tmpl.body, text)
-        continue
-      }
-      if (name === 'nihongo' || name === 'nihongo2' || name === 'nihongo3' || name === 'nihongo-s' || name === 'nihongo foot') {
-        const text = parseNihongo(tmpl.body)
-        this._wiki = this._wiki.replace(tmpl.body, text)
-        continue
-      }
+      replacements.push({ start: tmpl.start, end: tmpl.end, text: replacement })
+    }
 
-      const hardcoded = DATA?.hardcoded || {}
-      if (hardcoded[name]) {
-        this._wiki = this._wiki.replace(tmpl.body, hardcoded[name])
-        continue
+    // Apply all replacements in one pass (sorted by position)
+    if (replacements.length > 0) {
+      replacements.sort((a, b) => a.start - b.start)
+      const parts: string[] = []
+      let lastEnd = 0
+      for (const r of replacements) {
+        if (r.start > lastEnd) {
+          parts.push(this._wiki.slice(lastEnd, r.start))
+        }
+        parts.push(r.text)
+        lastEnd = Math.max(lastEnd, r.end)
       }
-
-      const pronouns = DATA?.pronouns || ['they', 'them', 'their', 'theirs', 'themself']
-      if (pronouns.includes(name)) {
-        this._wiki = this._wiki.replace(tmpl.body, name)
-        continue
+      if (lastEnd < this._wiki.length) {
+        parts.push(this._wiki.slice(lastEnd))
       }
-
-      this._wiki = this._wiki.replace(tmpl.body, '')
+      this._wiki = parts.join('')
     }
   }
 
