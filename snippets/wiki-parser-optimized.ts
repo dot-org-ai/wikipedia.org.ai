@@ -17,7 +17,13 @@
  * Designed to work with wikipedia-25m analytics wrapper.
  */
 
-import { fastParse, type FastDocument } from '../src/lib/wtf-lite/fast'
+import {
+  fastParse,
+  parseInfoboxOnly,
+  parseLinksOnly,
+  parseCategoriesOnly,
+  type FastDocument,
+} from '../src/lib/wtf-lite/fast'
 import wtf, { loadData, type Document } from '../src/lib/wtf-lite/index'
 
 // CDN URL for extended parsing data (loaded lazily)
@@ -195,8 +201,10 @@ async function handlePost(request: Request, startTime: number): Promise<Response
  * /Title/summary - Fast parse, first 3 sentences
  * Target: 2.5ms CPU
  */
-function handleSummary(article: { title: string; wikitext: string }, startTime: number): Response {
+function handleSummary(article: { title: string; wikitext: string }, requestStart: number): Response {
+  const parseStart = performance.now()
   const doc = fastParse(article.wikitext, { title: article.title })
+  const parseTime = performance.now() - parseStart
 
   // Get first 3 sentences from intro section
   const intro = doc.sections[0]?.text || ''
@@ -209,22 +217,24 @@ function handleSummary(article: { title: string; wikitext: string }, startTime: 
     redirectTo: doc.redirectTo,
   }
 
-  return jsonResponse(result, startTime, 'fast')
+  return jsonResponse(result, requestStart, 'fast', parseTime)
 }
 
 /**
  * /Title/text - Fast parse, full text
  * Target: 3ms CPU
  */
-function handleText(article: { title: string; wikitext: string }, startTime: number): Response {
+function handleText(article: { title: string; wikitext: string }, requestStart: number): Response {
+  const parseStart = performance.now()
   const doc = fastParse(article.wikitext, { title: article.title })
+  const parseTime = performance.now() - parseStart
 
   return new Response(doc.text, {
     headers: {
       ...CORS_HEADERS,
       'Content-Type': 'text/plain; charset=utf-8',
       'Cache-Control': CACHE_CONTROL,
-      ...timingHeaders(startTime, 'fast'),
+      ...timingHeaders(requestStart, 'fast', parseTime),
     },
   })
 }
@@ -233,54 +243,69 @@ function handleText(article: { title: string; wikitext: string }, startTime: num
  * /Title/infobox - Regular parse, infobox data only
  * Target: 8ms CPU
  */
-function handleInfobox(article: { title: string; wikitext: string }, startTime: number): Response {
-  const doc = wtf(article.wikitext, { title: article.title })
-
-  const infoboxes = doc.infoboxes().map(i => ({
-    type: i.type(),
-    data: i.keyValue(),
-  }))
+function handleInfobox(article: { title: string; wikitext: string }, requestStart: number): Response {
+  const parseStart = performance.now()
+  // Use specialized fast parser for infoboxes
+  const result = parseInfoboxOnly(article.wikitext, { title: article.title })
+  const parseTime = performance.now() - parseStart
 
   return jsonResponse({
-    title: doc.title(),
-    infoboxes,
-  }, startTime, 'full')
+    title: result.title || article.title,
+    infoboxes: result.infoboxes,
+    isRedirect: result.isRedirect,
+  }, requestStart, 'fast', parseTime)
 }
 
 /**
  * /Title/links - Regular parse, links only
  * Target: 5ms CPU
  */
-function handleLinks(article: { title: string; wikitext: string }, startTime: number): Response {
-  const doc = wtf(article.wikitext, { title: article.title })
+function handleLinks(article: { title: string; wikitext: string }, requestStart: number): Response {
+  const parseStart = performance.now()
+  // Use specialized fast parser for links
+  const result = parseLinksOnly(article.wikitext, { title: article.title })
+  const parseTime = performance.now() - parseStart
 
   // Limit to first 100 links to keep response size reasonable
-  const links = doc.links().slice(0, 100).map(l => l.json())
+  const links = result.links.slice(0, 100)
 
   return jsonResponse({
-    title: doc.title(),
+    title: result.title || article.title,
     links,
-    totalLinks: doc.links().length,
-  }, startTime, 'full')
+    totalLinks: result.links.length,
+    isRedirect: result.isRedirect,
+    redirectTo: result.redirectTo,
+  }, requestStart, 'fast', parseTime)
 }
 
 /**
  * /Title/categories - Fast parse is sufficient
  */
-function handleCategories(article: { title: string; wikitext: string }, startTime: number): Response {
-  const doc = fastParse(article.wikitext, { title: article.title })
+function handleCategories(article: { title: string; wikitext: string }, requestStart: number): Response {
+  const parseStart = performance.now()
+  // Use specialized fast parser for categories
+  const result = parseCategoriesOnly(article.wikitext, { title: article.title })
+  const parseTime = performance.now() - parseStart
 
   return jsonResponse({
-    title: doc.title || article.title,
-    categories: doc.categories,
-  }, startTime, 'fast')
+    title: result.title || article.title,
+    categories: result.categories,
+    isRedirect: result.isRedirect,
+  }, requestStart, 'fast', parseTime)
 }
 
 /**
  * /Title/references - Regular parse for references
  */
-function handleReferences(article: { title: string; wikitext: string }, startTime: number): Response {
-  const doc = wtf(article.wikitext, { title: article.title })
+function handleReferences(article: { title: string; wikitext: string }, requestStart: number): Response {
+  const parseStart = performance.now()
+  // Use lazy parsing - only need refs, skip infobox/tables
+  const doc = wtf(article.wikitext, {
+    title: article.title,
+    parseInfobox: false,
+    parseTables: false,
+  })
+  const parseTime = performance.now() - parseStart
 
   const references = doc.references().map(r => r.json())
 
@@ -288,32 +313,36 @@ function handleReferences(article: { title: string; wikitext: string }, startTim
     title: doc.title(),
     references,
     totalReferences: references.length,
-  }, startTime, 'full')
+  }, requestStart, 'full', parseTime)
 }
 
 /**
  * /Title.json - Full parse, complete JSON
  * May exceed 5ms for large articles - that's ok
  */
-function handleFullJson(article: { title: string; wikitext: string }, startTime: number): Response {
+function handleFullJson(article: { title: string; wikitext: string }, requestStart: number): Response {
+  const parseStart = performance.now()
   const doc = wtf(article.wikitext, { title: article.title })
-  return jsonResponse(toFullJson(doc), startTime, 'full')
+  const parseTime = performance.now() - parseStart
+  return jsonResponse(toFullJson(doc), requestStart, 'full', parseTime)
 }
 
 /**
  * /Title - Markdown output (default)
  */
-function handleMarkdown(article: { title: string; wikitext: string }, startTime: number): Response {
+function handleMarkdown(article: { title: string; wikitext: string }, requestStart: number): Response {
+  const parseStart = performance.now()
   // Use fast parse for markdown - templates become text
   const doc = fastParse(article.wikitext, { title: article.title })
   const markdown = toMarkdown(doc)
+  const parseTime = performance.now() - parseStart
 
   return new Response(markdown, {
     headers: {
       ...CORS_HEADERS,
       'Content-Type': 'text/markdown; charset=utf-8',
       'Cache-Control': CACHE_CONTROL,
-      ...timingHeaders(startTime, 'fast'),
+      ...timingHeaders(requestStart, 'fast', parseTime),
     },
   })
 }
@@ -501,14 +530,15 @@ function extractSentences(text: string, n: number): string[] {
 function jsonResponse(
   data: object,
   startTime: number,
-  mode: 'fast' | 'full'
+  mode: 'fast' | 'full',
+  parseTime?: number
 ): Response {
   return Response.json(data, {
     headers: {
       ...CORS_HEADERS,
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': CACHE_CONTROL,
-      ...timingHeaders(startTime, mode),
+      ...timingHeaders(startTime, mode, parseTime),
     },
   })
 }
@@ -530,12 +560,14 @@ function errorResponse(message: string, status: number, startTime: number): Resp
 /**
  * Generate timing headers for analytics integration
  */
-function timingHeaders(startTime: number, mode: string): Record<string, string> {
-  const cpuTime = (performance.now() - startTime).toFixed(2)
+function timingHeaders(startTime: number, mode: string, parseTime?: number): Record<string, string> {
+  const totalTime = (performance.now() - startTime).toFixed(2)
+  const parseMs = parseTime?.toFixed(2) || totalTime
   return {
     'X-Parse-Mode': mode,
-    'X-CPU-Time-Ms': cpuTime,
-    'Server-Timing': `cpu;dur=${cpuTime};desc="${mode} parse"`,
+    'X-Parse-Time-Ms': parseMs,
+    'X-Total-Time-Ms': totalTime,
+    'Server-Timing': `parse;dur=${parseMs};desc="${mode}",total;dur=${totalTime}`,
   }
 }
 
