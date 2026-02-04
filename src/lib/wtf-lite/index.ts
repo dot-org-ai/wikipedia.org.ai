@@ -20,6 +20,15 @@ export type {
   InfoboxJson,
   SectionJson,
   DocumentJson,
+  ImageData,
+  ImageJson,
+  // Table types
+  TableCellJson,
+  TableRowJson,
+  TableJson,
+  // Reference types
+  ReferenceData,
+  ReferenceJson,
   // Template types
   Coordinate,
   DateTemplate,
@@ -39,6 +48,9 @@ export type {
 // ============================================================================
 export { Link, Sentence } from './links.js'
 export { Document, Section, Paragraph, Infobox, List } from './classes.js'
+export { Image } from './image.js'
+export { Table } from './table.js'
+export { Reference } from './reference.js'
 
 // Fast mode for snippets (5ms CPU limit)
 export { fastParse } from './fast.js'

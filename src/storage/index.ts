@@ -21,18 +21,22 @@ export type {
   ManifestFile,
   Manifest,
   ArticleWriterConfig,
+  VariantWriterConfig,
   PartitionedWriterConfig,
   RelationshipWriterConfig,
   BloomFilterConfig,
   FileBloomFilter,
   WriteResult,
   ArticleBatch,
+  FileLimitThresholds,
+  FileLimitWarningCallback,
 } from './types.js';
 
 // Constants
 export {
   ARTICLE_TYPES,
   SHREDDED_INFOBOX_FIELDS,
+  VARIANT_SHRED_FIELDS,
   ARTICLE_SCHEMA,
   FORWARD_REL_SCHEMA,
   REVERSE_REL_SCHEMA,
@@ -46,6 +50,10 @@ export {
   StreamingArticleWriter,
   writeArticlesToBuffer,
   inferShreddedFields,
+  // VARIANT shredding writer
+  VariantArticleWriter,
+  StreamingVariantArticleWriter,
+  writeVariantArticlesToBuffer,
 } from './parquet-writer.js';
 
 // Partitioned Writer
@@ -54,6 +62,7 @@ export {
   StreamingPartitionedWriter,
   createPartitionedWriter,
   mergeManifests,
+  FileLimitExceededError,
 } from './partitioner.js';
 
 // Relationship Writer
@@ -90,3 +99,15 @@ export {
   type SerializedIDIndex,
   type ArticleLocation,
 } from '../indexes/id-index.js';
+
+// Export Formats
+export {
+  exportAllFormats,
+  writeFullFormat,
+  writeInfoboxesFormat,
+  writeIndexFormat,
+  writeTypeFormat,
+  type ExportFormat,
+  type ExportWriterConfig,
+  type ExportResult,
+} from './export-formats.js';

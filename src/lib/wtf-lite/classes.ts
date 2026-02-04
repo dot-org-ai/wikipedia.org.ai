@@ -4,11 +4,14 @@
 
 import type { ParsedTemplate } from './types'
 import { Link, Sentence, parseSentence, parseLinks, splitSentences } from './links'
+import { Image } from './image'
+import { Reference, parseReferences } from './reference'
+import { Table, findTables } from './table'
 import {
   DATA, CATEGORIES, INFOBOXES, REDIRECTS, MONTHS, DAYS, CURRENCY,
   REF_SECTION_NAMES
 } from './constants'
-import { preProcess, trim, findTemplates, stripTemplates } from './utils'
+import { preProcess, trim, findTemplates } from './utils'
 import {
   parseTemplateParams,
   parseBirthDate, parseDeathDate, parseStartDate, parseAsOf,
@@ -16,7 +19,25 @@ import {
   parseGoal, parsePlayer, parseSportsTable, parsePlayoffBracket,
   parseConvert, parseFraction, parseVal, parseSortname,
   parseHorizontalList, parseUnbulletedList, parseBulletedList,
-  parseURL, parseNihongo
+  parseURL, parseNihongo,
+  // New template parsers
+  HARDCODED, EASY_INLINE, ZEROS, TABLE_CELLS, SHIP_PREFIXES,
+  ABBREVIATIONS, PRONOUNS,
+  parseAge, parseAgeYM, parseAgeYMD, parseTimeAgo,
+  parseBirthYearAge, parseDeathYearAge, parseReign, parseOldStyleDate,
+  parseFirstWord, parseLastWord, parseTrunc, parseReplace,
+  parseSmall, parseRadic, parseDecade, parseCentury, parseMillennium,
+  parseDec, parseRA, parseBrSeparated, parseCommaSeparated,
+  parseAnchoredList, parsePagelist, parseCatlist, parseTerm, parseLinum,
+  parseBlockIndent, parsePercentage, parsePlural, parseMin, parseMax,
+  parseRound, parseFormatNum, parseHexadecimal, parseHex2Dec, parseAbbrlink,
+  parseLc, parseUc, parseUcfirst, parseLcfirst, parseTitleCase,
+  parseBraces, parseTl, parseAbbr, parseLiteralTranslation,
+  parseMetro, parseSubway, parseTram, parseFerry, parseLrtStation, parseMrtStation,
+  parseShip, parseAutoLink, parseTableCell, parseEasyInline, parseZero,
+  parseAbbreviation, parseSportsYear, parseMusic, parseUsPolAbbr, parseUshr,
+  parseFontColor, parseColoredLink, parseGaps, parseAngleBracket, parseBracket,
+  parseMarriage, resolveTemplateAlias
 } from './templates'
 
 // ============================================================================
@@ -117,14 +138,21 @@ export class Section {
   private _infoboxes: Infobox[] = []
   private _templates: ParsedTemplate[] = []
   private _coordinates: { lat: number; lon: number }[] = []
+  private _tables: Table[] = []
+  private _references: Reference[] = []
 
   constructor(data: { title: string; depth: number; wiki: string }, doc: Document) {
     this._title = data.title || ''
     this._depth = data.depth
     this._wiki = data.wiki || ''
 
+    // Parse tables before templates (tables may contain templates)
+    this.parseTables()
+    // Parse references BEFORE templates so citation templates inside refs are preserved
+    const refResult = parseReferences(this._wiki)
+    this._references = refResult.references
+    this._wiki = refResult.wiki
     this.parseTemplates(doc)
-    this._wiki = this._wiki.replace(/<ref[^>]*>(?:[^<]|<(?!\/ref>))*<\/ref>/gi, ' ').replace(/<ref[^>]*\/>/gi, ' ')
     this.parseParagraphs()
   }
 
@@ -136,25 +164,37 @@ export class Section {
   infoboxes(): Infobox[] { return this._infoboxes }
   templates(): ParsedTemplate[] { return this._templates }
   coordinates(): { lat: number; lon: number }[] { return this._coordinates }
+  /** Get tables from this section */
+  tables(): Table[] { return this._tables }
+  /** Get all references in this section */
+  references(): Reference[] { return this._references }
   sentences(): Sentence[] { return this._paragraphs.flatMap(p => p.sentences()) }
-  links(): Link[] { return [...this._infoboxes.flatMap(i => i.links()), ...this.sentences().flatMap(s => s.links()), ...this.lists().flatMap(l => l.links())] }
+  links(): Link[] { return [...this._infoboxes.flatMap(i => i.links()), ...this.sentences().flatMap(s => s.links()), ...this.lists().flatMap(l => l.links()), ...this._tables.flatMap(t => t.links())] }
   lists(): List[] { return this._paragraphs.flatMap(p => p.lists()) }
   text(): string { return this._paragraphs.map(p => p.text()).join('\n\n') }
+
+  private parseTables(): void {
+    const result = findTables(this._wiki)
+    this._tables = result.tables
+    this._wiki = result.wiki
+  }
 
   private parseTemplates(_doc: Document): void {
     const templates = findTemplates(this._wiki)
     const infos = DATA?.infoboxes || INFOBOXES
     const infoReg = new RegExp('^(subst.)?(' + infos.join('|') + ')(?=:| |\\n|$)', 'i')
-    const hardcoded = DATA?.hardcoded || {}
-    const pronouns = DATA?.pronouns || ['they', 'them', 'their', 'theirs', 'themself']
+    const hardcodedCdn = DATA?.hardcoded || {}
+    const pronounsCdn = DATA?.pronouns || []
 
     // Collect replacements: { start, end, replacement }
     const replacements: { start: number; end: number; text: string }[] = []
 
     for (const tmpl of templates) {
-      const name = tmpl.name.toLowerCase()
+      // Resolve aliases first
+      const name = resolveTemplateAlias(tmpl.name.toLowerCase())
       let replacement = ''
 
+      // Infobox templates
       if (infoReg.test(name) || /^infobox /i.test(name) || / infobox$/i.test(name)) {
         const obj = parseTemplateParams(tmpl.body, 'raw')
         let type = (obj['template'] as string) || ''
@@ -162,7 +202,9 @@ export class Section {
         if (m?.[0]) type = type.replace(m[0], '').trim()
         delete obj['template']; delete obj['list']
         this._infoboxes.push(new Infobox({ type, data: obj as Record<string, Sentence> }))
-      } else if (name === 'coord' || name.startsWith('coor')) {
+      }
+      // Coordinate templates
+      else if (name === 'coord' || name.startsWith('coor')) {
         const coord = parseCoord(tmpl.body)
         if (coord.lat && coord.lon) {
           this._coordinates.push({ lat: coord.lat, lon: coord.lon })
@@ -172,25 +214,54 @@ export class Section {
             replacement = `${coord.lat}°${coord.latDir}, ${coord.lon}°${coord.lonDir}`
           }
         }
-      } else if (name === 'birth date and age' || name === 'bda' || name === 'birth date') {
+      }
+      // Date templates
+      else if (name === 'birth date and age' || name === 'bda' || name === 'birth date') {
         replacement = parseBirthDate(tmpl.body, this._templates)
       } else if (name === 'death date and age' || name === 'death date') {
         replacement = parseDeathDate(tmpl.body, this._templates)
-      } else if (name === 'start date' || name === 'end date' || name === 'start' || name === 'end') {
+      } else if (name === 'start date' || name === 'end date' || name === 'start' || name === 'end' || name === 'start date and age' || name === 'end date and age') {
         replacement = parseStartDate(tmpl.body, this._templates)
-      } else if (name === 'currentday' || name === 'localday') {
+      } else if (name === 'birth year and age') {
+        replacement = parseBirthYearAge(tmpl.body)
+      } else if (name === 'death year and age') {
+        replacement = parseDeathYearAge(tmpl.body)
+      } else if (name === 'age' || name === 'age nts') {
+        replacement = parseAge(tmpl.body)
+      } else if (name === 'age in years' || name === 'diff-y') {
+        replacement = parseAge(tmpl.body) + ' years'
+      } else if (name === 'age in years and months' || name === 'diff-ym') {
+        replacement = parseAgeYM(tmpl.body)
+      } else if (name === 'age in years, months and days' || name === 'diff-ymd') {
+        replacement = parseAgeYMD(tmpl.body)
+      } else if (name === 'time ago') {
+        replacement = parseTimeAgo(tmpl.body)
+      } else if (name === 'reign' || name === 'r.') {
+        replacement = parseReign(tmpl.body)
+      } else if (name === 'oldstyledate') {
+        replacement = parseOldStyleDate(tmpl.body)
+      } else if (name === 'as of') {
+        replacement = parseAsOf(tmpl.body)
+      }
+      // Current date/time
+      else if (name === 'currentday' || name === 'localday') {
         replacement = String(new Date().getDate())
-      } else if (name === 'currentmonth' || name === 'currentmonthname' || name === 'localmonth') {
+      } else if (name === 'currentmonth' || name === 'currentmonthname' || name === 'localmonth' || name === 'currentmonthabbrev') {
         replacement = MONTHS[new Date().getMonth()] ?? ''
       } else if (name === 'currentyear' || name === 'localyear') {
         replacement = String(new Date().getFullYear())
       } else if (name === 'currentdayname' || name === 'localdayname') {
         replacement = DAYS[new Date().getDay()] ?? ''
-      } else if (name === 'as of') {
-        replacement = parseAsOf(tmpl.body)
-      } else if (CURRENCY[name] || name === 'currency') {
+      } else if (name === 'monthyear') {
+        const d = new Date()
+        replacement = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+      }
+      // Currency templates
+      else if (CURRENCY[name] || name === 'currency') {
         replacement = parseCurrency(tmpl.body)
-      } else if (name === 'goal') {
+      }
+      // Sports templates
+      else if (name === 'goal') {
         replacement = parseGoal(tmpl.body, this._templates)
       } else if (name === 'player') {
         replacement = parsePlayer(tmpl.body, this._templates)
@@ -198,27 +269,192 @@ export class Section {
         parseSportsTable(tmpl.body, this._templates)
       } else if (name === '4teambracket' || name.includes('teambracket')) {
         parsePlayoffBracket(tmpl.body, this._templates)
-      } else if (name === 'convert' || name === 'cvt') {
+      } else if (['baseball year', 'by', 'mlb year', 'nlds year', 'nldsy', 'alds year', 'aldsy', 'nfl year', 'nfl playoff year', 'nba year'].includes(name)) {
+        replacement = parseSportsYear(tmpl.body)
+      }
+      // Math/conversion templates
+      else if (name === 'convert' || name === 'cvt') {
         replacement = parseConvert(tmpl.body)
-      } else if (name === 'fraction' || name === 'frac') {
+      } else if (name === 'fraction' || name === 'frac' || name === 'sfrac') {
         replacement = parseFraction(tmpl.body)
       } else if (name === 'val') {
         replacement = parseVal(tmpl.body)
-      } else if (name === 'sortname') {
-        replacement = parseSortname(tmpl.body)
-      } else if (name === 'hlist' || name === 'plainlist' || name === 'flatlist') {
+      } else if (name === 'radic' || name === 'sqrt') {
+        replacement = parseRadic(tmpl.body)
+      } else if (name === 'percentage' || name === 'pct') {
+        replacement = parsePercentage(tmpl.body)
+      } else if (name === 'min') {
+        replacement = parseMin(tmpl.body)
+      } else if (name === 'max') {
+        replacement = parseMax(tmpl.body)
+      } else if (name === 'round') {
+        replacement = parseRound(tmpl.body)
+      } else if (name === 'formatnum') {
+        replacement = parseFormatNum(tmpl.body)
+      } else if (name === 'hexadecimal') {
+        replacement = parseHexadecimal(tmpl.body)
+      } else if (name === 'hex2dec' || name === 'h2d') {
+        replacement = parseHex2Dec(tmpl.body)
+      } else if (name === 'dec') {
+        replacement = parseDec(tmpl.body)
+      } else if (name === 'ra') {
+        replacement = parseRA(tmpl.body)
+      } else if (name === 'decade') {
+        replacement = parseDecade(tmpl.body)
+      } else if (name === 'century') {
+        replacement = parseCentury(tmpl.body)
+      } else if (name === 'millennium') {
+        replacement = parseMillennium(tmpl.body)
+      } else if (name === 'plural') {
+        replacement = parsePlural(tmpl.body)
+      }
+      // List templates
+      else if (name === 'hlist' || name === 'plainlist' || name === 'flatlist' || name === 'plain list') {
         replacement = parseHorizontalList(tmpl.body)
-      } else if (name === 'ubl' || name === 'ubil' || name === 'unbulleted list') {
+      } else if (name === 'ubl' || name === 'ubil' || name === 'unbulleted list' || name === 'collapsible list') {
         replacement = parseUnbulletedList(tmpl.body)
       } else if (name === 'bulleted list') {
         replacement = parseBulletedList(tmpl.body)
-      } else if (name === 'url') {
+      } else if (name === 'br separated entries') {
+        replacement = parseBrSeparated(tmpl.body)
+      } else if (name === 'comma separated entries') {
+        replacement = parseCommaSeparated(tmpl.body)
+      } else if (name === 'anchored list' || name === 'bare anchored list') {
+        replacement = parseAnchoredList(tmpl.body)
+      } else if (name === 'pagelist') {
+        replacement = parsePagelist(tmpl.body)
+      } else if (name === 'catlist') {
+        replacement = parseCatlist(tmpl.body)
+      } else if (name === 'term') {
+        replacement = parseTerm(tmpl.body)
+      } else if (name === 'linum') {
+        replacement = parseLinum(tmpl.body)
+      } else if (name === 'block indent') {
+        replacement = parseBlockIndent(tmpl.body)
+      } else if (name === 'gaps') {
+        replacement = parseGaps(tmpl.body)
+      }
+      // Text manipulation templates
+      else if (name === 'sortname') {
+        replacement = parseSortname(tmpl.body)
+      } else if (name === 'first word') {
+        replacement = parseFirstWord(tmpl.body)
+      } else if (name === 'last word') {
+        replacement = parseLastWord(tmpl.body)
+      } else if (name === 'trunc' || name === 'str left' || name === 'str crop') {
+        replacement = parseTrunc(tmpl.body)
+      } else if (name === 'replace' || name === 'str rep') {
+        replacement = parseReplace(tmpl.body)
+      } else if (name === 'small') {
+        replacement = parseSmall(tmpl.body)
+      } else if (name === 'lc') {
+        replacement = parseLc(tmpl.body)
+      } else if (name === 'uc') {
+        replacement = parseUc(tmpl.body)
+      } else if (name === 'ucfirst') {
+        replacement = parseUcfirst(tmpl.body)
+      } else if (name === 'lcfirst') {
+        replacement = parseLcfirst(tmpl.body)
+      } else if (name === 'title case') {
+        replacement = parseTitleCase(tmpl.body)
+      } else if (name === 'braces') {
+        replacement = parseBraces(tmpl.body)
+      } else if (name === 'tl' || name === 'tlu' || name === 'tl2' || name === 'demo') {
+        replacement = parseTl(tmpl.body)
+      } else if (name === 'angle bracket' || name === 'angbr') {
+        replacement = parseAngleBracket(tmpl.body)
+      } else if (name === 'bracket' || name === 'brackets') {
+        replacement = parseBracket(tmpl.body)
+      }
+      // Link templates
+      else if (name === 'url') {
         replacement = parseURL(tmpl.body)
-      } else if (name === 'nihongo' || name === 'nihongo2' || name === 'nihongo3' || name === 'nihongo-s' || name === 'nihongo foot') {
+      } else if (name === 'abbrlink') {
+        replacement = parseAbbrlink(tmpl.body)
+      } else if (name === 'auto link' || name === 'no redirect' || name === 'bl') {
+        replacement = parseAutoLink(tmpl.body)
+      } else if (name === 'colored link') {
+        replacement = parseColoredLink(tmpl.body)
+      }
+      // Transit templates
+      else if (name === 'metro' || name === 'metrod' || name === 'station' || name === 'stn') {
+        replacement = parseMetro(tmpl.body)
+      } else if (name === 'subway') {
+        replacement = parseSubway(tmpl.body)
+      } else if (name === 'tram') {
+        replacement = parseTram(tmpl.body)
+      } else if (name === 'ferry' || name === 'fw') {
+        replacement = parseFerry(tmpl.body)
+      } else if (name === 'lrt station' || name === 'lrt' || name === 'lrts') {
+        replacement = parseLrtStation(tmpl.body)
+      } else if (name === 'mrt station' || name === 'mrt' || name === 'mrts') {
+        replacement = parseMrtStation(tmpl.body)
+      }
+      // Ship templates
+      else if (SHIP_PREFIXES.includes(name)) {
+        replacement = parseShip(tmpl.body)
+      }
+      // Language templates
+      else if (name === 'nihongo' || name === 'nihongo2' || name === 'nihongo3' || name === 'nihongo-s' || name === 'nihongo foot') {
         replacement = parseNihongo(tmpl.body)
-      } else if (hardcoded[name]) {
-        replacement = hardcoded[name]
-      } else if (pronouns.includes(name)) {
+      } else if (name.startsWith('lang-') || name.startsWith('lang ')) {
+        // Language templates - just extract the text
+        replacement = parseZero(tmpl.body)
+      }
+      // Abbreviation templates
+      else if (name === 'abbr' || name === 'tooltip' || name === 'abbrv' || name === 'define') {
+        replacement = parseAbbr(tmpl.body)
+      } else if (name === 'literal translation' || name === 'lit' || name === 'literal') {
+        replacement = parseLiteralTranslation(tmpl.body)
+      } else if (ABBREVIATIONS.some(a => a[0] === name)) {
+        replacement = parseAbbreviation(tmpl.body)
+      }
+      // Marriage template
+      else if (name === 'marriage' || name === 'married') {
+        replacement = parseMarriage(tmpl.body)
+      }
+      // US politics templates
+      else if (name === 'uspolabbr') {
+        replacement = parseUsPolAbbr(tmpl.body)
+      } else if (name === 'ushr' || name === 'ushr2') {
+        replacement = parseUshr(tmpl.body)
+      }
+      // Music template
+      else if (name === 'music') {
+        replacement = parseMusic(tmpl.body)
+      }
+      // Font/color templates
+      else if (name === 'font color') {
+        replacement = parseFontColor(tmpl.body)
+      }
+      // Indicator templates
+      else if (name === 'increase' || name === 'up' || name === 'gain') {
+        replacement = '▲'
+      } else if (name === 'decrease' || name === 'down' || name === 'loss') {
+        replacement = '▼'
+      } else if (name === 'steady' || name === 'no change') {
+        replacement = '▬'
+      }
+      // Table cell templates
+      else if (TABLE_CELLS.includes(name)) {
+        replacement = parseTableCell(tmpl.body)
+      }
+      // Easy inline templates (extract specific parameter)
+      else if (EASY_INLINE[name] !== undefined) {
+        replacement = parseEasyInline(tmpl.body)
+      }
+      // Zero templates (extract first parameter)
+      else if (ZEROS.includes(name)) {
+        replacement = parseZero(tmpl.body)
+      }
+      // Hardcoded symbol templates
+      else if (HARDCODED[name]) {
+        replacement = HARDCODED[name]
+      } else if (hardcodedCdn[name]) {
+        replacement = hardcodedCdn[name]
+      }
+      // Pronoun templates
+      else if (PRONOUNS.includes(name) || pronounsCdn.includes(name)) {
         replacement = name
       }
       // All other templates: replacement stays ''
@@ -295,6 +531,7 @@ export class Document {
   private _title: string | null
   private _categories: string[] = []
   private _sections: Section[] = []
+  private _images: Image[] = []
   private _type: string = 'page'
   private _redirectTo: Link | null = null
 
@@ -316,7 +553,9 @@ export class Document {
       return
     }
 
-    this._wiki = preProcess(this._wiki)
+    const processed = preProcess(this._wiki)
+    this._wiki = processed.text
+    this._images = processed.images
     this.parseCategories()
     this._sections = parseSections(this)
   }
@@ -347,16 +586,31 @@ export class Document {
   paragraphs(): Paragraph[] { return this._sections.flatMap(s => s.paragraphs()) }
   sentences(): Sentence[] { return this._sections.flatMap(s => s.sentences()) }
   links(): Link[] { return this._sections.flatMap(s => s.links()) }
+  /** Get all images from the document */
+  images(n?: number): Image[] { return typeof n === 'number' ? (this._images[n] ? [this._images[n]!] : []) : this._images }
+  /** Get the first/main image if available */
+  image(): Image | null { return this._images[0] || null }
   infoboxes(): Infobox[] { return this._sections.flatMap(s => s.infoboxes()).sort((a, b) => Object.keys(b.data).length - Object.keys(a.data).length) }
   coordinates(): { lat: number; lon: number }[] { return this._sections.flatMap(s => s.coordinates()) }
   templates(): ParsedTemplate[] { return this._sections.flatMap(s => s.templates()) }
+  /** Get all tables from the document */
+  tables(): Table[] { return this._sections.flatMap(s => s.tables()) }
+  /** Get all references from the document */
+  references(): Reference[] { return this._sections.flatMap(s => s.references()) }
   text(): string { return this.isRedirect() ? '' : this._sections.map(s => s.text()).join('\n\n') }
   json(): object {
     return {
       title: this.title(),
       categories: this.categories(),
       coordinates: this.coordinates(),
-      sections: this._sections.map(s => ({ title: s.title(), depth: s.depth(), paragraphs: s.paragraphs().map(p => ({ sentences: p.sentences().map(sen => sen.json()) })), infoboxes: s.infoboxes().map(i => i.json()) }))
+      images: this._images.map(i => i.json()),
+      sections: this._sections.map(s => ({
+        title: s.title(),
+        depth: s.depth(),
+        paragraphs: s.paragraphs().map(p => ({ sentences: p.sentences().map(sen => sen.json()) })),
+        infoboxes: s.infoboxes().map(i => i.json()),
+        tables: s.tables().map(t => t.json())
+      }))
     }
   }
 }

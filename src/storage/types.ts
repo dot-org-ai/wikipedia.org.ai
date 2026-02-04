@@ -72,6 +72,25 @@ export const SHREDDED_INFOBOX_FIELDS: readonly string[] = [
 ] as const;
 
 /**
+ * Fields to shred from $data VARIANT column for predicate pushdown.
+ *
+ * These are "hot" filter fields commonly used in WHERE clauses:
+ * - title: Article title lookups
+ * - $type: Type-based filtering (person, place, org, etc.)
+ * - wikidata_id: Wikidata Q-number lookups
+ * - updated_at: Time-based filtering (lastmod)
+ *
+ * The $data column stores the full article as VARIANT for fast SELECT *,
+ * while these shredded columns enable statistics-based row group skipping.
+ */
+export const VARIANT_SHRED_FIELDS: readonly string[] = [
+  'title',
+  '$type',
+  'wikidata_id',
+  'updated_at',
+] as const;
+
+/**
  * Forward relationship record
  * Links from source article to target
  */
@@ -188,11 +207,54 @@ export interface ArticleWriterConfig {
 }
 
 /**
+ * Configuration for VariantArticleWriter
+ *
+ * Uses VARIANT shredding approach where:
+ * - $data column stores full article as VARIANT (fast SELECT *)
+ * - Hot filter fields are shredded for statistics-based row group skipping
+ */
+export interface VariantWriterConfig extends ArticleWriterConfig {
+  /**
+   * Fields to shred from the article for predicate pushdown.
+   * Defaults to VARIANT_SHRED_FIELDS: ['title', '$type', 'wikidata_id', 'updated_at']
+   */
+  shredFields?: readonly string[];
+}
+
+/**
+ * File limit warning thresholds
+ */
+export interface FileLimitThresholds {
+  /** Warn at this count (default: 50,000) */
+  warnAt?: number;
+  /** Second warning at this count (default: 75,000) */
+  warnHighAt?: number;
+  /** Critical warning at this count (default: 90,000) */
+  criticalAt?: number;
+  /** Error at this count (default: 100,000) */
+  maxFiles?: number;
+}
+
+/**
+ * File limit warning callback
+ */
+export type FileLimitWarningCallback = (
+  currentCount: number,
+  threshold: number,
+  level: 'warn' | 'warn-high' | 'critical' | 'error',
+  suggestion?: string
+) => void;
+
+/**
  * Configuration for PartitionedWriter
  */
 export interface PartitionedWriterConfig extends ArticleWriterConfig {
   /** Base path for data partitions */
   dataPath?: string;
+  /** File limit thresholds for Cloudflare Workers 100k limit */
+  fileLimits?: FileLimitThresholds;
+  /** Callback for file limit warnings (defaults to console.warn/error) */
+  onFileLimitWarning?: FileLimitWarningCallback;
 }
 
 /**

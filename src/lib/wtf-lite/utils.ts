@@ -3,15 +3,17 @@
  */
 
 import { FILE_NS_PREFIXES, IGNORE_TAGS } from './constants'
+import { Image, findImages } from './image'
 
 // Helper function to trim whitespace
 export const trim = (s: string): string => (s || '').replace(/^\s+|\s+$/g, '').replace(/ {2,}/g, ' ')
 
 /**
  * Preprocess wiki markup - remove comments, special tags, etc.
+ * Now returns both cleaned text and extracted images
  * Optimized to minimize string operations
  */
-export function preProcess(wiki: string): string {
+export function preProcess(wiki: string): { text: string; images: Image[] } {
   // Combine simple replacements into single pass using replaceAll where possible
   wiki = wiki
     .replace(/<!--(?:[^-]|-(?!->)){0,3000}-->/g, '')  // HTML comments
@@ -24,26 +26,9 @@ export function preProcess(wiki: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
 
-  // Strip [[File:...]], [[Image:...]] - single pass collecting positions
-  const fileNsReg = new RegExp(`\\[\\[(${FILE_NS_PREFIXES.join('|')}):`, 'gi')
-  const filePositions: { start: number; end: number }[] = []
-  let match
-  while ((match = fileNsReg.exec(wiki)) !== null) {
-    const startIdx = match.index
-    let depth = 0, endIdx = startIdx
-    for (let i = startIdx; i < wiki.length - 1; i++) {
-      if (wiki[i] === '[' && wiki[i + 1] === '[') { depth++; i++ }
-      else if (wiki[i] === ']' && wiki[i + 1] === ']') { depth--; i++; if (depth === 0) { endIdx = i + 1; break } }
-    }
-    if (endIdx > startIdx) {
-      filePositions.push({ start: startIdx, end: endIdx })
-      fileNsReg.lastIndex = endIdx  // Continue from end instead of resetting
-    }
-  }
-  // Strip all file links in one pass
-  if (filePositions.length > 0) {
-    wiki = stripTemplates(wiki, filePositions)
-  }
+  // Extract [[File:...]], [[Image:...]] - parse and store instead of stripping
+  const { images, text: wikiWithoutImages } = findImages(wiki, FILE_NS_PREFIXES)
+  wiki = wikiWithoutImages
 
   // HTML tag cleanup
   wiki = wiki
@@ -55,7 +40,7 @@ export function preProcess(wiki: string): string {
     .replace(/ ?< ?br ?\/> ?/g, '\n')
     .replace(/\([,;: ]+\)/g, '')
 
-  return wiki.trim()
+  return { text: wiki.trim(), images }
 }
 
 /**

@@ -12,6 +12,7 @@ import { embedCommand } from './cli/embed.js';
 import { queryCommand } from './cli/query.js';
 import { serveCommand } from './cli/serve.js';
 import { buildIndexesCommand } from './cli/build-indexes.js';
+import { exportCommand } from './cli/export.js';
 
 const program = new Command()
   .name('wikipedia')
@@ -24,6 +25,7 @@ program.addCommand(embedCommand);
 program.addCommand(queryCommand);
 program.addCommand(serveCommand);
 program.addCommand(buildIndexesCommand);
+program.addCommand(exportCommand);
 
 // Stats command (inline since it's simple)
 program

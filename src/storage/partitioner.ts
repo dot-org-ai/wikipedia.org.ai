@@ -17,8 +17,26 @@ import type {
   WriteResult,
   Manifest,
   ManifestFile,
+  FileLimitThresholds,
+  FileLimitWarningCallback,
 } from './types.js';
 import { ARTICLE_TYPES } from './types.js';
+
+/** Default file limit thresholds for Cloudflare Workers */
+const DEFAULT_FILE_LIMITS: Required<FileLimitThresholds> = {
+  warnAt: 50_000,
+  warnHighAt: 75_000,
+  criticalAt: 90_000,
+  maxFiles: 100_000,
+};
+
+/** Consolidation strategy suggestions based on file count */
+const CONSOLIDATION_SUGGESTIONS = {
+  warn: 'Consider consolidating small partitions or increasing rowGroupSize to reduce file count.',
+  'warn-high': 'Approaching Cloudflare Workers 100k file limit. Increase file sizes or consolidate partitions.',
+  critical: 'CRITICAL: Near Cloudflare Workers 100k file limit! Consolidate files immediately or increase maxFileSize.',
+  error: 'Cloudflare Workers 100k file limit exceeded. Cannot deploy without file consolidation.',
+} as const;
 
 /** Default configuration values */
 const DEFAULT_ROW_GROUP_SIZE = 10000;
@@ -42,6 +60,22 @@ interface PartitionState {
 }
 
 /**
+ * Error thrown when file count exceeds the configured maximum
+ */
+export class FileLimitExceededError extends Error {
+  constructor(
+    public readonly currentCount: number,
+    public readonly maxFiles: number
+  ) {
+    super(
+      `Cloudflare Workers file limit exceeded: ${currentCount} files (max: ${maxFiles}). ` +
+      CONSOLIDATION_SUGGESTIONS.error
+    );
+    this.name = 'FileLimitExceededError';
+  }
+}
+
+/**
  * PartitionedWriter - Routes articles to type-specific Parquet files
  *
  * Features:
@@ -49,11 +83,20 @@ interface PartitionState {
  * - Automatic shard rollover at file size limit
  * - Manifest generation for dataset discovery
  * - Memory-efficient streaming writes
+ * - Cloudflare Workers 100k file limit validation with configurable thresholds
  */
 export class PartitionedWriter {
-  private readonly config: Required<PartitionedWriterConfig>;
+  private readonly config: Required<Omit<PartitionedWriterConfig, 'fileLimits' | 'onFileLimitWarning'>>;
   private readonly partitions: Map<ArticleType, PartitionState>;
+  private readonly fileLimits: Required<FileLimitThresholds>;
+  private readonly onFileLimitWarning: FileLimitWarningCallback;
   private closed = false;
+
+  /** Track which warning thresholds have been triggered to avoid duplicate warnings */
+  private triggeredWarnings: Set<'warn' | 'warn-high' | 'critical'> = new Set();
+
+  /** Total file count across all partitions */
+  private totalFileCount = 0;
 
   constructor(config: PartitionedWriterConfig) {
     this.config = {
@@ -64,6 +107,17 @@ export class PartitionedWriter {
       bloomFilters: config.bloomFilters ?? true,
       dataPath: config.dataPath ?? DEFAULT_DATA_PATH,
     };
+
+    // Initialize file limit thresholds
+    this.fileLimits = {
+      warnAt: config.fileLimits?.warnAt ?? DEFAULT_FILE_LIMITS.warnAt,
+      warnHighAt: config.fileLimits?.warnHighAt ?? DEFAULT_FILE_LIMITS.warnHighAt,
+      criticalAt: config.fileLimits?.criticalAt ?? DEFAULT_FILE_LIMITS.criticalAt,
+      maxFiles: config.fileLimits?.maxFiles ?? DEFAULT_FILE_LIMITS.maxFiles,
+    };
+
+    // Initialize warning callback
+    this.onFileLimitWarning = config.onFileLimitWarning ?? this.defaultWarningCallback;
 
     // Initialize partition states
     this.partitions = new Map();
@@ -76,6 +130,89 @@ export class PartitionedWriter {
         totalBytes: 0,
       });
     }
+  }
+
+  /**
+   * Default warning callback that logs to console
+   */
+  private defaultWarningCallback: FileLimitWarningCallback = (
+    currentCount,
+    threshold,
+    level,
+    suggestion
+  ) => {
+    const message = `[PartitionedWriter] File count ${level.toUpperCase()}: ${currentCount}/${threshold} files. ${suggestion ?? ''}`;
+    if (level === 'error') {
+      console.error(message);
+    } else {
+      console.warn(message);
+    }
+  };
+
+  /**
+   * Check file count against thresholds and emit warnings
+   * @throws FileLimitExceededError if max file count is exceeded
+   */
+  private checkFileLimits(): void {
+    const count = this.totalFileCount;
+
+    // Check error threshold first (hard limit)
+    if (count >= this.fileLimits.maxFiles) {
+      this.onFileLimitWarning(
+        count,
+        this.fileLimits.maxFiles,
+        'error',
+        CONSOLIDATION_SUGGESTIONS.error
+      );
+      throw new FileLimitExceededError(count, this.fileLimits.maxFiles);
+    }
+
+    // Check critical threshold (90k by default)
+    if (count >= this.fileLimits.criticalAt && !this.triggeredWarnings.has('critical')) {
+      this.triggeredWarnings.add('critical');
+      this.onFileLimitWarning(
+        count,
+        this.fileLimits.criticalAt,
+        'critical',
+        CONSOLIDATION_SUGGESTIONS.critical
+      );
+    }
+
+    // Check high warning threshold (75k by default)
+    if (count >= this.fileLimits.warnHighAt && !this.triggeredWarnings.has('warn-high')) {
+      this.triggeredWarnings.add('warn-high');
+      this.onFileLimitWarning(
+        count,
+        this.fileLimits.warnHighAt,
+        'warn-high',
+        CONSOLIDATION_SUGGESTIONS['warn-high']
+      );
+    }
+
+    // Check first warning threshold (50k by default)
+    if (count >= this.fileLimits.warnAt && !this.triggeredWarnings.has('warn')) {
+      this.triggeredWarnings.add('warn');
+      this.onFileLimitWarning(
+        count,
+        this.fileLimits.warnAt,
+        'warn',
+        CONSOLIDATION_SUGGESTIONS.warn
+      );
+    }
+  }
+
+  /**
+   * Get current total file count
+   */
+  getTotalFileCount(): number {
+    return this.totalFileCount;
+  }
+
+  /**
+   * Get file limit configuration
+   */
+  getFileLimits(): Required<FileLimitThresholds> {
+    return { ...this.fileLimits };
   }
 
   /**
@@ -146,6 +283,12 @@ export class PartitionedWriter {
   getStats(): {
     byType: Record<ArticleType, { rows: number; files: number; bytes: number }>;
     total: { rows: number; files: number; bytes: number };
+    fileLimits: {
+      current: number;
+      maxFiles: number;
+      percentUsed: number;
+      thresholds: Required<FileLimitThresholds>;
+    };
   } {
     const byType: Record<ArticleType, { rows: number; files: number; bytes: number }> =
       {} as Record<ArticleType, { rows: number; files: number; bytes: number }>;
@@ -168,11 +311,18 @@ export class PartitionedWriter {
     return {
       byType,
       total: { rows: totalRows, files: totalFiles, bytes: totalBytes },
+      fileLimits: {
+        current: this.totalFileCount,
+        maxFiles: this.fileLimits.maxFiles,
+        percentUsed: (this.totalFileCount / this.fileLimits.maxFiles) * 100,
+        thresholds: { ...this.fileLimits },
+      },
     };
   }
 
   /**
    * Flush a single partition's buffer
+   * @throws FileLimitExceededError if creating a new file would exceed the max file limit
    */
   private async flushPartition(type: ArticleType): Promise<void> {
     const partition = this.partitions.get(type)!;
@@ -195,6 +345,10 @@ export class PartitionedWriter {
         partition.shardIndex++;
       }
     }
+
+    // Every flush creates a new file entry, so increment file count and check limits
+    this.totalFileCount++;
+    this.checkFileLimits();
 
     const path = this.generatePartitionPath(type, partition.shardIndex);
     await this.writeToFile(path, buffer);
@@ -449,6 +603,20 @@ export class StreamingPartitionedWriter {
    */
   getStats() {
     return this.writer.getStats();
+  }
+
+  /**
+   * Get current total file count
+   */
+  getTotalFileCount(): number {
+    return this.writer.getTotalFileCount();
+  }
+
+  /**
+   * Get file limit configuration
+   */
+  getFileLimits(): Required<FileLimitThresholds> {
+    return this.writer.getFileLimits();
   }
 }
 

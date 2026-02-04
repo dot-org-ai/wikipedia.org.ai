@@ -59,7 +59,8 @@
     "ingest:full": "bun run scripts/run-local-ingest.ts",
     "ingest:simple": "bun run scripts/run-local-ingest.ts --simple",
     "ingest:test": "bun run scripts/run-local-ingest.ts --simple --limit 100",
-    "ingest:test:no-embed": "bun run scripts/run-local-ingest.ts --simple --limit 100 --no-embeddings"
+    "ingest:test:no-embed": "bun run scripts/run-local-ingest.ts --simple --limit 100 --no-embeddings",
+    "bundle:wtf-data": "npx tsx scripts/bundle-wtf-data.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.982.0",

@@ -10,6 +10,7 @@ export { embedCommand } from './embed.js';
 export { queryCommand } from './query.js';
 export { serveCommand } from './serve.js';
 export { buildIndexesCommand, buildIndexes } from './build-indexes.js';
+export { exportCommand } from './export.js';
 
 // Utilities
 export {
