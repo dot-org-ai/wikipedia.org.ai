@@ -425,8 +425,18 @@ export function createWikiRouter(): Router {
   });
 
   // ==========================================================================
-  // Wiki Parser Routes (wiki.org.ai)
+  // Wiki Parser Routes (wikipedia.org.ai)
   // ==========================================================================
+
+  // Health check (for E2E tests and monitoring)
+  router.get('/health', async () => {
+    return jsonResponse({
+      status: 'healthy',
+      service: 'wikipedia-parser',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
+    });
+  });
 
   // Root: Show usage info
   router.get('/', handleWikiRoot);

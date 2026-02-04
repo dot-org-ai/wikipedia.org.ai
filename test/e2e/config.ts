@@ -19,8 +19,10 @@ export const CPU_LIMITS = {
  * E2E test configuration
  */
 export interface E2EConfig {
-  /** Base URL for the deployed worker */
+  /** Base URL for the deployed wiki parser (wikipedia.org.ai) */
   baseUrl: string;
+  /** Base URL for the deployed API (api.wikipedia.org.ai) */
+  apiBaseUrl: string;
   /** Whether to skip E2E tests (for local-only testing) */
   skipE2E: boolean;
   /** Request timeout in milliseconds */
@@ -39,6 +41,7 @@ export interface E2EConfig {
 export function loadE2EConfig(): E2EConfig {
   return {
     baseUrl: process.env.E2E_BASE_URL || 'https://wikipedia.org.ai',
+    apiBaseUrl: process.env.E2E_API_BASE_URL || 'https://api.wikipedia.org.ai',
     skipE2E: process.env.SKIP_E2E === 'true' || process.env.SKIP_E2E === '1',
     requestTimeoutMs: parseInt(process.env.E2E_TIMEOUT_MS || '30000', 10),
     retries: parseInt(process.env.E2E_RETRIES || '2', 10),
