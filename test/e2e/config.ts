@@ -36,6 +36,26 @@ export interface E2EConfig {
 }
 
 /**
+ * Snippet-specific configuration
+ */
+export interface SnippetConfig {
+  /** Base URL for the optimized snippet */
+  snippetUrl: string;
+  /** CPU limit for snippets (hard limit: 5ms) */
+  cpuLimitMs: number;
+}
+
+/**
+ * Load snippet configuration
+ */
+export function loadSnippetConfig(): SnippetConfig {
+  return {
+    snippetUrl: process.env.E2E_SNIPPET_URL || 'https://wiki-optimized.workers.do',
+    cpuLimitMs: 5, // Hard Cloudflare Snippet limit
+  };
+}
+
+/**
  * Load E2E configuration from environment variables
  */
 export function loadE2EConfig(): E2EConfig {

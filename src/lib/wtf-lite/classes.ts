@@ -9,10 +9,13 @@ import { Reference, parseReferences } from './reference'
 import { Table, findTables } from './table'
 import {
   DATA, CATEGORIES, INFOBOXES, REDIRECTS, MONTHS, DAYS, CURRENCY,
+  DISAMBIG_TEMPLATES, DISAMBIG_TITLE_SUFFIXES,
   PATTERNS,
   getRedirectPattern, getCategoryPattern, getCategoryRemovePattern,
   getInfoboxPattern, getRefSectionPattern,
-  buildInfoboxPattern, buildCategoryPattern, buildCategoryRemovePattern, buildRedirectPattern
+  getDisambigTemplatePattern, getDisambigTitlePattern,
+  buildInfoboxPattern, buildCategoryPattern, buildCategoryRemovePattern, buildRedirectPattern,
+  buildDisambigTemplatePattern, buildDisambigTitlePattern
 } from './constants'
 import { preProcess, trim, findTemplates, stripTemplates } from './utils'
 import {
@@ -142,11 +145,13 @@ export class Section {
   private _tables: Table[] = []
   private _references: Reference[] = []
   private _options: ParseOptions
+  private _index: number = 0
 
-  constructor(data: { title: string; depth: number; wiki: string }, doc: Document, options?: ParseOptions) {
+  constructor(data: { title: string; depth: number; wiki: string; index?: number }, doc: Document, options?: ParseOptions) {
     this._title = data.title || ''
     this._depth = data.depth
     this._wiki = data.wiki || ''
+    this._index = data.index ?? 0
     this._options = options || doc.options()
 
     // Parse tables before templates (tables may contain templates)
@@ -174,6 +179,8 @@ export class Section {
 
   title(): string { return this._title }
   depth(): number { return this._depth }
+  /** Get section index (0-based position in document) */
+  index(): number { return this._index }
   /** Adjust section depth (used when filtering reference sections) */
   adjustDepth(delta: number): void { this._depth += delta }
   paragraphs(): Paragraph[] { return this._paragraphs }
@@ -188,6 +195,23 @@ export class Section {
   links(): Link[] { return [...this._infoboxes.flatMap(i => i.links()), ...this.sentences().flatMap(s => s.links()), ...this.lists().flatMap(l => l.links()), ...this._tables.flatMap(t => t.links())] }
   lists(): List[] { return this._paragraphs.flatMap(p => p.lists()) }
   text(): string { return this._paragraphs.map(p => p.text()).join('\n\n') }
+  /** Get JSON representation of this section */
+  json(): object {
+    return {
+      title: this._title,
+      depth: this._depth,
+      index: this._index,
+      paragraphs: this._paragraphs.map(p => ({
+        sentences: p.sentences().map(s => s.json())
+      })),
+      infoboxes: this._infoboxes.map(i => i.json()),
+      lists: this._paragraphs.flatMap(p => p.lists()).map(l => ({
+        lines: l.lines().map(s => s.text())
+      })),
+      tables: this._tables.map(t => t.json()),
+      references: this._references.map(r => r.json())
+    }
+  }
 
   private parseTables(): void {
     const result = findTables(this._wiki)
@@ -553,6 +577,7 @@ export function parseSections(doc: Document, options?: ParseOptions): Section[] 
   const splits = wiki.split(PATTERNS.SECTION_SPLIT)
   const sections: Section[] = []
   const maxSections = options?.maxSections || 0
+  let sectionIndex = 0
   for (let i = 0; i < splits.length; i += 2) {
     // Early exit if we've reached maxSections limit
     if (maxSections > 0 && sections.length >= maxSections) break
@@ -562,7 +587,8 @@ export function parseSections(doc: Document, options?: ParseOptions): Section[] 
     let title = '', depth = 0
     const m = heading.match(PATTERNS.HEADING_EXTRACT)
     if (m) { title = trim(parseSentence(m[2] || '').text()); depth = m[1] ? m[1].length - 2 : 0 }
-    sections.push(new Section({ title, depth, wiki: content }, doc, options))
+    sections.push(new Section({ title, depth, wiki: content, index: sectionIndex }, doc, options))
+    sectionIndex++
   }
   // Use cached ref section pattern
   const refReg = getRefSectionPattern()
@@ -671,6 +697,27 @@ export class Document {
   title(s?: string): string | null { if (s !== undefined) { this._title = s; return s }; return this._title || this.sentences()[0]?.bold() || null }
   isRedirect(): boolean { return this._type === 'redirect' }
   redirectTo(): Link | null { return this._redirectTo }
+  /** Check if this is a disambiguation page */
+  isDisambiguation(): boolean {
+    // Check if title ends with disambiguation suffix
+    const title = this.title()
+    if (title) {
+      const disambigTitlePattern = DATA?.disambigTitles
+        ? buildDisambigTitlePattern(DATA.disambigTitles)
+        : getDisambigTitlePattern()
+      if (disambigTitlePattern.test(title)) return true
+    }
+    // Check for disambiguation templates in the raw wiki text
+    const templates = DATA?.disambigTemplates || DISAMBIG_TEMPLATES
+    const disambigTemplatePattern = DATA?.disambigTemplates
+      ? buildDisambigTemplatePattern(templates)
+      : getDisambigTemplatePattern()
+    if (disambigTemplatePattern.test(this._wiki)) return true
+    // Check for "may refer to:" pattern (common in disambiguation pages)
+    // Handles both wiki markup ('''text''') and plain quotes ('text' or "text")
+    if (/(?:'''+|['"])[^'"]{1,60}(?:'''+|['"])?\s+may\s+refer\s+to:/i.test(this._wiki)) return true
+    return false
+  }
   categories(n?: number): string[] { return typeof n === 'number' ? [this._categories[n] ?? ''] : this._categories }
   sections(clue?: string | number): Section[] {
     if (typeof clue === 'string') return this._sections.filter(s => s.title().toLowerCase() === clue.toLowerCase().trim())

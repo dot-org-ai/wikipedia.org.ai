@@ -4,7 +4,7 @@
  * Tests the complete Wikipedia ingestion pipeline from download to classified output.
  */
 
-import { describe, it, expect, beforeEach, beforeAll, afterAll, mock, spyOn } from 'bun:test';
+import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { rm, mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
@@ -27,7 +27,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesPath = join(__dirname, '..', 'fixtures');
 
 // Mock fetch globally
-const mockFetch = mock(() => Promise.resolve(new Response('')));
+const mockFetch = vi.fn(() => Promise.resolve(new Response('')));
 const originalFetch = globalThis.fetch;
 globalThis.fetch = mockFetch as unknown as typeof fetch;
 
@@ -146,7 +146,7 @@ describe('Wikipedia Pipeline E2E', () => {
     });
 
     const progressUpdates: PipelineStats[] = [];
-    const onProgress = mock((stats: PipelineStats) => {
+    const onProgress = vi.fn((stats: PipelineStats) => {
       progressUpdates.push({ ...stats });
     });
 

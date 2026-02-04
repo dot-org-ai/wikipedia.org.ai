@@ -45,6 +45,10 @@ export class Image {
   file(): string {
     let file = this._data.file || ''
     if (file) {
+      // Spaces to underscores (before adding prefix)
+      file = file.replace(/ /g, '_')
+      // Titlecase filename first character
+      file = file.charAt(0).toUpperCase() + file.substring(1)
       // Check if it already has a file namespace prefix (any language)
       // Use cached pattern instead of building new one each time
       if (!getFileNsPrefixPattern().test(file)) {
@@ -52,10 +56,6 @@ export class Image {
         file = `File:${file}`
       }
       file = file.trim()
-      // Titlecase first character
-      file = file.charAt(0).toUpperCase() + file.substring(1)
-      // Spaces to underscores
-      file = file.replace(PATTERNS.UNDERSCORE, '_')
     }
     return file
   }

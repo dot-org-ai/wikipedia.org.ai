@@ -399,4 +399,114 @@ describe('edge cases and security', () => {
       expect(() => preProcess(withControls)).not.toThrow();
     });
   });
+
+  describe('extended edge cases', () => {
+    it('should handle long repeated patterns', () => {
+      const repeatedPattern = '[[link]] '.repeat(1000);
+      const start = Date.now();
+      preProcess(repeatedPattern);
+      const elapsed = Date.now() - start;
+      expect(elapsed).toBeLessThan(2000);
+    });
+
+    it('should handle alternating brackets and braces', () => {
+      const alternating = '[[a]] {{b}} [[c]] {{d}} [[e]] {{f}}';
+      const result = preProcess(alternating);
+      expect(result.text).toContain('[[a]]');
+      expect(result.text).toContain('{{b}}');
+    });
+
+    it('should handle deeply nested brackets', () => {
+      const deep = '[[[[[[content]]]]]]';
+      expect(() => preProcess(deep)).not.toThrow();
+    });
+
+    it('should handle empty brackets', () => {
+      const empty = '[[]] {{}} [[]] {{}}';
+      expect(() => preProcess(empty)).not.toThrow();
+    });
+
+    it('should handle brackets with only whitespace', () => {
+      const whitespaceOnly = '[[   ]] {{   }}';
+      expect(() => preProcess(whitespaceOnly)).not.toThrow();
+    });
+
+    it('should handle very long single line', () => {
+      const longLine = 'a'.repeat(100000);
+      const start = Date.now();
+      preProcess(longLine);
+      const elapsed = Date.now() - start;
+      expect(elapsed).toBeLessThan(1000);
+    });
+  });
+
+  describe('unicode edge cases', () => {
+    it('should handle CJK characters', () => {
+      const cjk = '中文 日本語 한국어';
+      const result = preProcess(cjk);
+      expect(result.text).toContain('中文');
+      expect(result.text).toContain('日本語');
+      expect(result.text).toContain('한국어');
+    });
+
+    it('should handle RTL text', () => {
+      const rtl = 'العربية עברית';
+      const result = preProcess(rtl);
+      expect(result.text).toContain('العربية');
+      expect(result.text).toContain('עברית');
+    });
+
+    it('should handle emoji', () => {
+      const emoji = '🎉 celebration 🎊';
+      const result = preProcess(emoji);
+      expect(result.text).toContain('🎉');
+      expect(result.text).toContain('🎊');
+    });
+
+    it('should handle combining characters', () => {
+      const combining = 'café naïve résumé';
+      const result = preProcess(combining);
+      expect(result.text).toContain('café');
+      expect(result.text).toContain('naïve');
+    });
+
+    it('should handle surrogate pairs', () => {
+      const surrogatePairs = '𝕳𝖊𝖑𝖑𝖔'; // Mathematical fraktur
+      expect(() => preProcess(surrogatePairs)).not.toThrow();
+    });
+  });
+
+  describe('HTML tag stripping extended', () => {
+    it('should handle self-closing tags without space', () => {
+      const selfClosing = 'text<br/>more text';
+      const result = preProcess(selfClosing);
+      expect(result.text).not.toContain('<br/>');
+    });
+
+    it('should handle self-closing tags with space', () => {
+      const selfClosing = 'text<br />more text';
+      const result = preProcess(selfClosing);
+      expect(result.text).not.toContain('<br />');
+    });
+
+    it('should handle nested HTML tags', () => {
+      const nested = '<div><span>content</span></div>';
+      const result = preProcess(nested);
+      expect(result.text).not.toContain('<div>');
+      expect(result.text).not.toContain('<span>');
+      expect(result.text).toContain('content');
+    });
+
+    it('should handle HTML attributes with quotes', () => {
+      const withAttrs = '<div class="test" id="main">content</div>';
+      const result = preProcess(withAttrs);
+      expect(result.text).not.toContain('class=');
+      expect(result.text).toContain('content');
+    });
+
+    it('should handle malformed HTML gracefully', () => {
+      const malformed = '<div><span>unclosed';
+      expect(() => preProcess(malformed)).not.toThrow();
+    });
+  });
 });

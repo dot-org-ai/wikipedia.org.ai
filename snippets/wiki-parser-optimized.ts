@@ -199,12 +199,14 @@ async function handlePost(request: Request, startTime: number): Promise<Response
 
 /**
  * /Title/summary - Fast parse, first 3 sentences
- * Target: 2.5ms CPU
+ * Target: 2.5ms CPU (measured via Cloudflare tail events, not in-worker timing)
+ *
+ * NOTE: Cloudflare Workers freeze timers during execution (security feature),
+ * so we cannot measure CPU time from inside the worker. Use `wrangler tail`
+ * or Cloudflare Analytics to see actual CPU time.
  */
 function handleSummary(article: { title: string; wikitext: string }, requestStart: number): Response {
-  const parseStart = performance.now()
   const doc = fastParse(article.wikitext, { title: article.title })
-  const parseTime = performance.now() - parseStart
 
   // Get first 3 sentences from intro section
   const intro = doc.sections[0]?.text || ''
@@ -217,7 +219,7 @@ function handleSummary(article: { title: string; wikitext: string }, requestStar
     redirectTo: doc.redirectTo,
   }
 
-  return jsonResponse(result, requestStart, 'fast', parseTime)
+  return jsonResponse(result, requestStart, 'fast')
 }
 
 /**

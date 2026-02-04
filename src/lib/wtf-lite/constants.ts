@@ -70,6 +70,47 @@ export const IGNORE_TAGS = ['table', 'code', 'score', 'data', 'categorytree', 'c
 // Reference section names (i18n)
 export const REF_SECTION_NAMES = ['references', 'reference', 'einzelnachweise', 'referencias', 'références', '脚注']
 
+// Disambiguation templates (i18n)
+export const DISAMBIG_TEMPLATES = [
+  // English
+  'disambiguation', 'disambig', 'disamb', 'dab', 'dp', 'geodis', 'hndis', 'hospitaldis', 'numberdis',
+  'schooldis', 'mathdab', 'roaddis', 'set index', 'setindex', 'shipindex', 'mountainindex',
+  // German
+  'begriffsklärung',
+  // French
+  'homonymie',
+  // Spanish
+  'desambiguación',
+  // Portuguese
+  'desambiguação',
+  // Italian
+  'disambigua',
+  // Russian
+  'многозначность', 'неоднозначность',
+  // Arabic
+  'توضيح',
+  // Chinese
+  '消歧义', '消歧義',
+  // Japanese
+  '曖昧さ回避',
+  // Other i18n
+  'bisongidila'  // Lingala
+]
+
+// Disambiguation title suffixes (i18n)
+export const DISAMBIG_TITLE_SUFFIXES = [
+  '(disambiguation)',
+  '(begriffsklärung)',
+  '(homonymie)',
+  '(desambiguación)',
+  '(desambiguação)',
+  '(disambigua)',
+  '(многозначность)',
+  '(توضيح)',
+  '(消歧义)',
+  '(曖昧さ回避)'
+]
+
 // Abbreviations for sentence splitting
 export const ABBREVIATIONS = ['mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr', 'vs', 'etc', 'esp', 'eg', 'ie', 'inc', 'ltd', 'co', 'corp', 'st', 'mt', 'ft', 'gen', 'gov', 'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'no', 'vol', 'pp', 'ca']
 
@@ -362,6 +403,17 @@ export function buildAbbrevPattern(abbreviations: string[]): RegExp {
   return new RegExp("(?:^| |')(?:" + abbreviations.join('|') + ")[.!?] ?$", 'i')
 }
 
+/** Build disambiguation template detection pattern */
+export function buildDisambigTemplatePattern(templates: string[]): RegExp {
+  return new RegExp('\\{\\{\\s*(?:' + templates.join('|') + ')\\s*(?:\\|[^}]*)?\\}\\}', 'i')
+}
+
+/** Build disambiguation title suffix pattern */
+export function buildDisambigTitlePattern(suffixes: string[]): RegExp {
+  const escaped = suffixes.map(s => s.replace(/[()]/g, '\\$&'))
+  return new RegExp('(?:' + escaped.join('|') + ')\\s*$', 'i')
+}
+
 // ============================================================================
 // CACHED DYNAMIC PATTERNS
 // ============================================================================
@@ -446,4 +498,22 @@ export function getAbbrevPattern(): RegExp {
     _cachedAbbrevPattern = buildAbbrevPattern(ABBREVIATIONS)
   }
   return _cachedAbbrevPattern
+}
+
+/** Cached disambiguation template pattern */
+let _cachedDisambigTemplatePattern: RegExp | null = null
+export function getDisambigTemplatePattern(): RegExp {
+  if (!_cachedDisambigTemplatePattern) {
+    _cachedDisambigTemplatePattern = buildDisambigTemplatePattern(DISAMBIG_TEMPLATES)
+  }
+  return _cachedDisambigTemplatePattern
+}
+
+/** Cached disambiguation title pattern */
+let _cachedDisambigTitlePattern: RegExp | null = null
+export function getDisambigTitlePattern(): RegExp {
+  if (!_cachedDisambigTitlePattern) {
+    _cachedDisambigTitlePattern = buildDisambigTitlePattern(DISAMBIG_TITLE_SUFFIXES)
+  }
+  return _cachedDisambigTitlePattern
 }

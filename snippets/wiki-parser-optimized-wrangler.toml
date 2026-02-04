@@ -35,13 +35,18 @@ watch_dir = "src/lib/wtf-lite"
 
 # Limits configuration
 [limits]
-# Snippet CPU limit - 5ms for standard, 50ms for paid
-cpu_ms = 50
+# True Cloudflare Snippet CPU limit is 5ms
+# Set to 5 to validate snippet compatibility
+cpu_ms = 5
 
 # Observability
 [observability]
 enabled = true
 head_sampling_rate = 1
+
+# Tail worker for CPU time monitoring
+[[tail_consumers]]
+service = "wikipedia-tail"
 
 # Size budget tracking:
 # Current estimates:
