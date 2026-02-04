@@ -23,12 +23,11 @@
 
 import type { RequestContext } from '../types.js';
 import { jsonResponse, errorResponse } from '../middleware.js';
-import wtf, { loadData, Document } from '../../../lib/wtf-lite/index.js';
+// Using full wtf_wikipedia for better parsing (wtf-lite was timing out on large articles)
+import wtf from 'wtf_wikipedia';
+type Document = ReturnType<typeof wtf>;
 
-const DATA_CDN_URL = 'https://wikipedia-embeddings.r2.dev/wtf-data.json';
-
-// Flag to track if data has been loaded
-let dataLoaded = false;
+// wtf_wikipedia doesn't need external data loading
 
 /** POST request body for parsing raw wikitext */
 interface ParseRequest {
@@ -93,23 +92,7 @@ interface FullJsonResponse {
   templates: unknown[];
 }
 
-/**
- * Ensure wtf-lite data is loaded
- */
-async function ensureDataLoaded(ctx: ExecutionContext): Promise<void> {
-  if (!dataLoaded) {
-    // Load in background, don't block request
-    ctx.waitUntil(
-      loadData(DATA_CDN_URL)
-        .then(() => {
-          dataLoaded = true;
-        })
-        .catch(() => {
-          // Ignore errors, will use inline defaults
-        })
-    );
-  }
-}
+// wtf_wikipedia doesn't need data loading
 
 /**
  * Parse path to extract title, language, format, and section
@@ -201,19 +184,20 @@ async function fetchWikipediaArticle(
  * Convert Document to full JSON response
  */
 function toFullJson(doc: Document): FullJsonResponse {
+  const redirect = doc.redirectTo();
   return {
     title: doc.title(),
     isRedirect: doc.isRedirect(),
-    redirectTo: doc.redirectTo()?.page?.() || null,
+    redirectTo: redirect ? (typeof redirect === 'string' ? redirect : (redirect as any).page?.() || null) : null,
     categories: doc.categories(),
-    sections: doc.sections().map((s) => ({
+    sections: doc.sections().map((s: any) => ({
       title: s.title(),
       depth: s.depth(),
       text: s.text().slice(0, 2000),
     })),
-    infoboxes: doc.infoboxes().map((i) => ({ type: i.type(), data: i.json() })),
-    links: doc.links().slice(0, 100).map((l) => l.json()),
-    coordinates: doc.coordinates(),
+    infoboxes: doc.infoboxes().map((i: any) => ({ type: i.type(), data: i.json() })),
+    links: doc.links().slice(0, 100).map((l: any) => typeof l === 'string' ? { page: l } : l.json?.() || l),
+    coordinates: (doc as any).coordinates?.() || [],
     templates: doc.templates().slice(0, 50),
   };
 }
@@ -253,12 +237,12 @@ function toMarkdown(doc: Document): string {
 
   // Sections
   for (const section of doc.sections()) {
-    const title = section.title();
+    const title = (section as any).title();
     if (title && title !== 'Introduction') {
-      const heading = '#'.repeat(Math.min(section.depth() + 2, 6));
+      const heading = '#'.repeat(Math.min((section as any).depth() + 2, 6));
       lines.push(`${heading} ${title}`);
       lines.push('');
-      const text = section.text().trim();
+      const text = ((section as any).text?.() || '').trim();
       if (text) {
         lines.push(text.slice(0, 2000));
         lines.push('');
@@ -297,8 +281,6 @@ export async function handleWikiRoot(_ctx: RequestContext): Promise<Response> {
  * POST / - Parse raw wikitext
  */
 export async function handleWikiParsePost(ctx: RequestContext): Promise<Response> {
-  await ensureDataLoaded(ctx.ctx);
-
   try {
     const body = (await ctx.request.json()) as ParseRequest;
     const doc = wtf(body.wikitext || '', { title: body.title || 'Untitled' });
@@ -327,8 +309,6 @@ export async function handleWikiParsePost(ctx: RequestContext): Promise<Response
  *   etc.
  */
 export async function handleWikiArticle(ctx: RequestContext): Promise<Response> {
-  await ensureDataLoaded(ctx.ctx);
-
   const url = new URL(ctx.request.url);
   const path = url.pathname;
 
@@ -365,12 +345,12 @@ export async function handleWikiArticle(ctx: RequestContext): Promise<Response> 
     }
 
     if (section === 'infobox') {
-      const infoboxes = doc.infoboxes().map((i) => ({ type: i.type(), data: i.json() }));
+      const infoboxes = doc.infoboxes().map((i: any) => ({ type: i.type(), data: i.json() }));
       return jsonResponse({ title: doc.title(), infoboxes });
     }
 
     if (section === 'links') {
-      const links = doc.links().map((l) => l.json());
+      const links = doc.links().map((l: any) => typeof l === 'string' ? { page: l } : l.json?.() || l);
       return jsonResponse({ title: doc.title(), links });
     }
 

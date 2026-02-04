@@ -3,9 +3,6 @@ main = "dist/workers/api/index.js"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
-# Use Standard (formerly Unbound) for no CPU time limits on large article parsing
-usage_model = "standard"
-
 # Tail worker for CPU/event monitoring
 # The tail worker receives execution traces and monitors for CPU/memory issues
 [[tail_consumers]]
