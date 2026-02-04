@@ -50,80 +50,80 @@ describe('preProcess', () => {
     it('should remove single-line comments', () => {
       // Comment is replaced with empty string, leaving double space that gets preserved
       const result = preProcess('before <!-- comment --> after');
-      expect(result).not.toContain('<!--');
-      expect(result).toContain('before');
-      expect(result).toContain('after');
+      expect(result.text).not.toContain('<!--');
+      expect(result.text).toContain('before');
+      expect(result.text).toContain('after');
     });
 
     it('should remove multi-line comments', () => {
       const input = 'before <!-- multi\nline\ncomment --> after';
       const result = preProcess(input);
-      expect(result).not.toContain('<!--');
-      expect(result).toContain('before');
-      expect(result).toContain('after');
+      expect(result.text).not.toContain('<!--');
+      expect(result.text).toContain('before');
+      expect(result.text).toContain('after');
     });
 
     it('should handle multiple comments', () => {
       const input = '<!-- first --> text <!-- second -->';
       const result = preProcess(input);
-      expect(result).not.toContain('<!--');
-      expect(result).toContain('text');
+      expect(result.text).not.toContain('<!--');
+      expect(result.text).toContain('text');
     });
 
     it('should handle empty comment', () => {
       const result = preProcess('before <!----> after');
-      expect(result).not.toContain('<!--');
-      expect(result).toContain('before');
-      expect(result).toContain('after');
+      expect(result.text).not.toContain('<!--');
+      expect(result.text).toContain('before');
+      expect(result.text).toContain('after');
     });
   });
 
   describe('magic words', () => {
     it('should remove __NOTOC__', () => {
-      expect(preProcess('__NOTOC__ content')).toBe('content');
+      expect(preProcess('__NOTOC__ content').text).toBe('content');
     });
 
     it('should remove __NOEDITSECTION__', () => {
-      expect(preProcess('__NOEDITSECTION__ content')).toBe('content');
+      expect(preProcess('__NOEDITSECTION__ content').text).toBe('content');
     });
 
     it('should remove __FORCETOC__', () => {
-      expect(preProcess('__FORCETOC__ content')).toBe('content');
+      expect(preProcess('__FORCETOC__ content').text).toBe('content');
     });
 
     it('should remove __TOC__', () => {
-      expect(preProcess('__TOC__ content')).toBe('content');
+      expect(preProcess('__TOC__ content').text).toBe('content');
     });
 
     it('should be case insensitive', () => {
-      expect(preProcess('__notoc__ content')).toBe('content');
-      expect(preProcess('__NoToC__ content')).toBe('content');
+      expect(preProcess('__notoc__ content').text).toBe('content');
+      expect(preProcess('__NoToC__ content').text).toBe('content');
     });
   });
 
   describe('HTML entities', () => {
     it('should convert &nbsp; to space', () => {
-      expect(preProcess('hello&nbsp;world')).toBe('hello world');
+      expect(preProcess('hello&nbsp;world').text).toBe('hello world');
     });
 
     it('should convert &ndash; to hyphen', () => {
-      expect(preProcess('1990&ndash;2000')).toBe('1990-2000');
+      expect(preProcess('1990&ndash;2000').text).toBe('1990-2000');
     });
 
     it('should convert &mdash; to hyphen', () => {
-      expect(preProcess('text&mdash;more')).toBe('text-more');
+      expect(preProcess('text&mdash;more').text).toBe('text-more');
     });
 
     it('should convert &amp; to &', () => {
-      expect(preProcess('Tom &amp; Jerry')).toBe('Tom & Jerry');
+      expect(preProcess('Tom &amp; Jerry').text).toBe('Tom & Jerry');
     });
 
     it('should convert &quot; to "', () => {
-      expect(preProcess('&quot;quoted&quot;')).toBe('"quoted"');
+      expect(preProcess('&quot;quoted&quot;').text).toBe('"quoted"');
     });
 
     it('should convert &apos; to apostrophe', () => {
-      expect(preProcess("it&apos;s")).toBe("it's");
+      expect(preProcess("it&apos;s").text).toBe("it's");
     });
   });
 
@@ -131,32 +131,32 @@ describe('preProcess', () => {
     it('should remove [[File:...]] links', () => {
       const input = 'Text [[File:Example.jpg|thumb|Caption]] more';
       const result = preProcess(input);
-      expect(result).not.toContain('File:');
-      expect(result).not.toContain('Example.jpg');
+      expect(result.text).not.toContain('File:');
+      expect(result.text).not.toContain('Example.jpg');
     });
 
     it('should remove [[Image:...]] links', () => {
       const input = 'Text [[Image:Photo.png|right]] more';
       const result = preProcess(input);
-      expect(result).not.toContain('Image:');
+      expect(result.text).not.toContain('Image:');
     });
 
     it('should handle nested brackets in file captions', () => {
       const input = '[[File:Test.jpg|thumb|Caption with [[link]] inside]]';
       const result = preProcess(input);
-      expect(result).not.toContain('File:');
+      expect(result.text).not.toContain('File:');
     });
 
     it('should handle German Datei namespace', () => {
       const input = '[[Datei:Foto.jpg|thumb]] German';
       const result = preProcess(input);
-      expect(result).not.toContain('Datei:');
+      expect(result.text).not.toContain('Datei:');
     });
 
     it('should handle French Fichier namespace', () => {
       const input = '[[Fichier:Image.png]] French';
       const result = preProcess(input);
-      expect(result).not.toContain('Fichier:');
+      expect(result.text).not.toContain('Fichier:');
     });
   });
 
@@ -166,32 +166,32 @@ describe('preProcess', () => {
       const result = preProcess(input);
       // preProcess handles certain tags based on IGNORE_TAGS constant
       // Just verify it doesn't throw and produces output
-      expect(result).toBeDefined();
+      expect(result.text).toBeDefined();
     });
 
     it('should handle self-closing ref tags', () => {
       const input = 'Fact<ref name="x" /> more';
       const result = preProcess(input);
-      expect(result).toBeDefined();
+      expect(result.text).toBeDefined();
     });
 
     it('should convert <i>...</i> to italic markup', () => {
       const input = 'This is <i>italic</i> text';
       const result = preProcess(input);
-      expect(result).toContain("''italic''");
+      expect(result.text).toContain("''italic''");
     });
 
     it('should convert <b>...</b> to bold markup', () => {
       const input = 'This is <b>bold</b> text';
       const result = preProcess(input);
-      expect(result).toContain("'''bold'''");
+      expect(result.text).toContain("'''bold'''");
     });
 
     it('should remove simple HTML tags', () => {
       const input = '<p>paragraph</p><br/>';
       const result = preProcess(input);
-      expect(result).not.toContain('<p>');
-      expect(result).not.toContain('<br/>');
+      expect(result.text).not.toContain('<p>');
+      expect(result.text).not.toContain('<br/>');
     });
   });
 
@@ -199,25 +199,25 @@ describe('preProcess', () => {
     it('should remove tildes (signatures)', () => {
       const input = 'Comment ~~~ more';
       const result = preProcess(input);
-      expect(result).not.toContain('~~~');
+      expect(result.text).not.toContain('~~~');
     });
 
     it('should remove carriage returns', () => {
       const input = 'line1\r\nline2';
       const result = preProcess(input);
-      expect(result).not.toContain('\r');
+      expect(result.text).not.toContain('\r');
     });
 
     it('should convert Japanese full stop to period', () => {
       const input = 'Japanese text\u3002More text';
       const result = preProcess(input);
-      expect(result).toContain('. ');
+      expect(result.text).toContain('. ');
     });
 
     it('should remove horizontal rules', () => {
       const input = 'before ---- after';
       const result = preProcess(input);
-      expect(result).not.toContain('----');
+      expect(result.text).not.toContain('----');
     });
   });
 
@@ -225,13 +225,13 @@ describe('preProcess', () => {
     it('should remove empty parentheses with punctuation', () => {
       const input = 'Word ( ) more';
       const result = preProcess(input);
-      expect(result).not.toMatch(/\(\s*\)/);
+      expect(result.text).not.toMatch(/\(\s*\)/);
     });
 
     it('should remove parentheses with only punctuation inside', () => {
       const input = 'Word (,; ) more';
       const result = preProcess(input);
-      expect(result.trim()).not.toMatch(/\([,;:\s]+\)/);
+      expect(result.text.trim()).not.toMatch(/\([,;:\s]+\)/);
     });
   });
 });
