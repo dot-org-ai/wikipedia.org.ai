@@ -2,11 +2,14 @@
  * Utility functions for wtf-lite Wikipedia parser
  */
 
-import { FILE_NS_PREFIXES, IGNORE_TAGS } from './constants'
+import { FILE_NS_PREFIXES, PATTERNS, getIgnoreTagsPattern } from './constants'
 import { Image, findImages } from './image'
 
-// Helper function to trim whitespace
-export const trim = (s: string): string => (s || '').replace(/^\s+|\s+$/g, '').replace(/ {2,}/g, ' ')
+// Helper function to trim whitespace (uses pre-compiled patterns)
+export const trim = (s: string): string => {
+  if (!s) return ''
+  return s.replace(PATTERNS.TRIM_WHITESPACE, '').replace(PATTERNS.COLLAPSE_SPACES, ' ')
+}
 
 /**
  * Preprocess wiki markup - remove comments, special tags, etc.
@@ -14,31 +17,32 @@ export const trim = (s: string): string => (s || '').replace(/^\s+|\s+$/g, '').r
  * Optimized to minimize string operations
  */
 export function preProcess(wiki: string): { text: string; images: Image[] } {
-  // Combine simple replacements into single pass using replaceAll where possible
+  // Combine simple replacements into single pass using pre-compiled patterns
   wiki = wiki
-    .replace(/<!--(?:[^-]|-(?!->)){0,3000}-->/g, '')  // HTML comments
-    .replace(/__(NOTOC|NOEDITSECTION|FORCETOC|TOC)__/gi, '')  // Magic words
-    .replace(/~{2,3}|\r|----/g, '')  // Signatures, CR, horizontal rules
-    .replace(/\u3002/g, '. ')  // CJK period
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&ndash;|&mdash;/g, '-')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
+    .replace(PATTERNS.HTML_COMMENT, '')  // HTML comments
+    .replace(PATTERNS.MAGIC_WORDS, '')   // Magic words
+    .replace(PATTERNS.SIGNATURES_HR, '') // Signatures, CR, horizontal rules
+    .replace(PATTERNS.CJK_PERIOD, '. ')  // CJK period
+    .replace(PATTERNS.ENTITY_NBSP, ' ')
+    .replace(PATTERNS.ENTITY_NDASH, '-')
+    .replace(PATTERNS.ENTITY_MDASH, '-')
+    .replace(PATTERNS.ENTITY_AMP, '&')
+    .replace(PATTERNS.ENTITY_QUOT, '"')
+    .replace(PATTERNS.ENTITY_APOS, "'")
 
   // Extract [[File:...]], [[Image:...]] - parse and store instead of stripping
   const { images, text: wikiWithoutImages } = findImages(wiki, FILE_NS_PREFIXES)
   wiki = wikiWithoutImages
 
-  // HTML tag cleanup
+  // HTML tag cleanup (use cached pattern for ignore tags)
   wiki = wiki
-    .replace(new RegExp(`< ?(${IGNORE_TAGS.join('|')}) ?[^>]{0,200}>(?:[^<]|<(?!\\s?/\\s?(${IGNORE_TAGS.join('|')})\\s?>))+< ?/ ?(${IGNORE_TAGS.join('|')}) ?>`, 'gi'), ' ')
-    .replace(/ ?< ?(span|div|table|data) [a-zA-Z0-9=%.\-#:;'" ]{2,100}\/? ?> ?/g, ' ')
+    .replace(getIgnoreTagsPattern(), ' ')
+    .replace(PATTERNS.SELF_CLOSE_TAG, ' ')
     .replace(/<i>([^<]*(?:<(?!\/i>)[^<]*)*)<\/i>/g, "''$1''")
     .replace(/<b>([^<]*(?:<(?!\/b>)[^<]*)*)<\/b>/g, "'''$1'''")
-    .replace(/ ?<[ /]?(p|sub|sup|span|nowiki|div|table|br|tr|td|th|pre|hr|u)[ /]?> ?/g, ' ')
-    .replace(/ ?< ?br ?\/> ?/g, '\n')
-    .replace(/\([,;: ]+\)/g, '')
+    .replace(PATTERNS.INLINE_TAG, ' ')
+    .replace(PATTERNS.BR_TAG, '\n')
+    .replace(PATTERNS.EMPTY_PARENS, '')
 
   return { text: wiki.trim(), images }
 }
@@ -54,7 +58,7 @@ export function findTemplates(wiki: string): { body: string; name: string; start
     if (c === undefined) continue
     if (c === '{') { if (depth === 0) startIdx = i; depth++ }
     if (depth > 0) {
-      if (c === '}') { depth--; if (depth === 0) { carry.push(c); const t = carry.join(''); carry = []; if (/\{\{/.test(t) && /\}\}/.test(t)) list.push({ body: t, start: startIdx, end: i + 1 }); continue } }
+      if (c === '}') { depth--; if (depth === 0) { carry.push(c); const t = carry.join(''); carry = []; if (PATTERNS.TEMPLATE_OPEN.test(t) && PATTERNS.TEMPLATE_CLOSE.test(t)) list.push({ body: t, start: startIdx, end: i + 1 }); continue } }
       if (depth === 1 && c !== '{' && c !== '}') { depth = 0; carry = []; continue }
       carry.push(c)
     }
@@ -88,8 +92,13 @@ export function stripTemplates(wiki: string, templates: { start: number; end: nu
  */
 export function getTemplateName(tmpl: string): string {
   let name: string | undefined
-  if (/^\{\{[^\n]+\|/.test(tmpl)) name = (tmpl.match(/^\{\{(.+?)\|/) ?? [])[1]
-  else if (tmpl.indexOf('\n') !== -1) name = (tmpl.match(/^\{\{(.+)\n/) ?? [])[1]
-  else name = (tmpl.match(/^\{\{(.+?)\}\}$/) ?? [])[1]
-  return name ? name.replace(/:.*/, '').trim().toLowerCase().replace(/_/g, ' ') : ''
+  // Use pre-compiled patterns for template name extraction
+  if (PATTERNS.TEMPLATE_WITH_PIPE.test(tmpl)) {
+    name = (tmpl.match(PATTERNS.TEMPLATE_NAME_PIPE) ?? [])[1]
+  } else if (tmpl.indexOf('\n') !== -1) {
+    name = (tmpl.match(PATTERNS.TEMPLATE_NAME_NEWLINE) ?? [])[1]
+  } else {
+    name = (tmpl.match(PATTERNS.TEMPLATE_NAME_SIMPLE) ?? [])[1]
+  }
+  return name ? name.replace(/:.*/, '').trim().toLowerCase().replace(PATTERNS.UNDERSCORE, ' ') : ''
 }

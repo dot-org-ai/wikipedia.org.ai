@@ -1,0 +1,59 @@
+# Optimized Wiki Parser Snippet
+# Production-ready Wikipedia parser using wtf-lite fast mode
+#
+# Endpoints:
+#   /Title/summary -> fastParse() + first 3 sentences (target: 2.5ms)
+#   /Title/text -> fastParse() + full text (target: 3ms)
+#   /Title/infobox -> regular parse (target: 8ms)
+#   /Title/links -> links-only parse (target: 5ms)
+#   /Title.json -> full parse (may exceed 5ms)
+#   /Title -> markdown (fast mode, cached)
+#
+# Bundle target: <50KB gzipped
+# wtf-data.json loaded from CDN (not bundled)
+
+name = "wiki-parser-optimized"
+main = "wiki-parser-optimized.ts"
+compatibility_date = "2024-12-01"
+account_id = "b6641681fe423910342b9ffa1364c76d"
+
+# Routes - can be deployed alongside wiki-parser for A/B testing
+routes = [
+  { pattern = "wiki-optimized.workers.do/*", zone_name = "workers.do" }
+]
+
+# Environment variables
+[vars]
+# CDN URL for extended parsing data (lazy loaded)
+DATA_CDN_URL = "https://wikipedia-embeddings.r2.dev/wtf-data.json"
+
+# Build configuration - use esbuild for tree-shaking
+[build]
+command = "bunx esbuild snippets/wiki-parser-optimized.ts --bundle --format=esm --target=esnext --minify --outfile=dist/wiki-parser-optimized.js --external:__STATIC_CONTENT_MANIFEST"
+cwd = "."
+watch_dir = "src/lib/wtf-lite"
+
+# Limits configuration
+[limits]
+# Snippet CPU limit - 5ms for standard, 50ms for paid
+cpu_ms = 50
+
+# Observability
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+# Size budget tracking:
+# Current estimates:
+#   - fast.ts: ~6KB minified
+#   - Regular parse dependencies (when needed): ~40KB minified
+#   - Total with tree-shaking: ~45KB minified, ~15KB gzipped
+#
+# NOTE: wtf-data.json (5KB) is NOT bundled - loaded from CDN
+# This keeps the snippet small and allows data updates without redeployment
+
+# Deployment commands:
+#   Build:   bun run build:wiki-optimized
+#   Deploy:  wrangler deploy -c snippets/wiki-parser-optimized-wrangler.toml
+#   Test:    curl https://wiki-optimized.workers.do/Albert_Einstein/summary
+#   Logs:    wrangler tail -c snippets/wiki-parser-optimized-wrangler.toml

@@ -15,7 +15,7 @@
  */
 
 import type { TemplateParams, Coordinate, ParsedTemplate, TeamStats, BracketMatchTeam } from './types'
-import { MONTHS, DATA, CURRENCY, FLAGS } from './constants'
+import { MONTHS, DATA, CURRENCY, FLAGS, PATTERNS } from './constants'
 import { findTemplates } from './utils'
 import { parseSentence } from './links'
 
@@ -245,11 +245,11 @@ export const TEMPLATE_ALIASES: Record<string, string> = {
   'coor': 'coord', 'coor title dms': 'coord', 'coor title dec': 'coord',
   'coor dms': 'coord', 'coor dm': 'coord', 'coor dec': 'coord',
 
-  // Date aliases
-  'dob': 'start', 'birthdate': 'start', 'birth date': 'start',
-  'end date': 'start', 'death date': 'start', 'birth': 'start',
-  'death': 'start', 'start date': 'start', 'end': 'start',
-  'start date and age': 'start', 'end date and age': 'start',
+  // Date aliases - only map true aliases, not canonical template names
+  'dob': 'birth date', 'birthdate': 'birth date',
+  'b-da': 'birth date and age', 'bda': 'birth date and age',
+  'birth': 'birth date', 'death': 'death date',
+  'start': 'start date', 'end': 'end date',
 
   // Transit aliases
   'lrt': 'lrt station', 'lrts': 'lrt station',
@@ -323,7 +323,7 @@ function percentage(opts: { numerator: string | number; denominator: string | nu
  */
 export function toNumber(str: string): number {
   if (!str) return 0
-  str = String(str).replace(/[−–—]/g, '-').replace(/,/g, '')
+  str = String(str).replace(PATTERNS.DASHES, '-').replace(PATTERNS.COMMAS, '')
   return Number(str) || 0
 }
 
@@ -379,11 +379,12 @@ function timeSince(dateStr: string): string {
  * Parse template parameters into an object
  */
 export function parseTemplateParams(tmpl: string, fmt?: 'raw'): TemplateParams {
-  tmpl = tmpl.replace(/^\{\{/, '').replace(/\}\}$/, '')
+  tmpl = tmpl.replace(PATTERNS.TEMPLATE_PREFIX, '').replace(PATTERNS.TEMPLATE_SUFFIX, '')
   let arr = tmpl.split(/\n?\|/)
   arr.forEach((a, i) => {
     if (a === null) return
-    if (/\[\[[^\]]+$/.test(a) || /\{\{[^}]+$/.test(a) || a.split('{{').length !== a.split('}}').length || a.split('[[').length !== a.split(']]').length) {
+    // Use pre-compiled patterns for unbalanced bracket detection
+    if (PATTERNS.UNBALANCED_LINK.test(a) || PATTERNS.UNBALANCED_TEMPLATE.test(a) || a.split('{{').length !== a.split('}}').length || a.split('[[').length !== a.split(']]').length) {
       arr[i + 1] = arr[i] + '|' + arr[i + 1]; arr[i] = ''
     }
   })
@@ -392,7 +393,7 @@ export function parseTemplateParams(tmpl: string, fmt?: 'raw'): TemplateParams {
   const obj: TemplateParams = {}
   arr.forEach(str => {
     str = (str || '').trim()
-    if (/^[\p{Letter}0-9._/\- '()\t]+=/iu.test(str)) {
+    if (PATTERNS.NAMED_PARAM.test(str)) {
       const parts = str.split('='), key = (parts[0] || '').toLowerCase().trim(), val = parts.slice(1).join('=').trim()
       if (!obj[key] || val) obj[key] = val
     } else { obj['list'] = obj['list'] || []; (obj['list'] as string[]).push(str) }
@@ -414,7 +415,7 @@ export function parseTemplateParams(tmpl: string, fmt?: 'raw'): TemplateParams {
       obj[k] = fmt === 'raw' ? parseSentence(val) : parseSentence(val).text()
     }
   }
-  if (name) obj['template'] = name.trim().toLowerCase().replace(/_/g, ' ')
+  if (name) obj['template'] = name.trim().toLowerCase().replace(PATTERNS.UNDERSCORE, ' ')
   return obj
 }
 
@@ -715,18 +716,19 @@ export function parseNihongo(tmpl: string): string {
 
 // Simple list item parser that doesn't call parseTemplateParams
 function parseListItems_simple(tmpl: string): string[] {
-  tmpl = tmpl.replace(/^\{\{/, '').replace(/\}\}$/, '')
+  tmpl = tmpl.replace(PATTERNS.TEMPLATE_PREFIX, '').replace(PATTERNS.TEMPLATE_SUFFIX, '')
   let arr = tmpl.split(/\n?\|/)
   arr.forEach((a, i) => {
     if (a === null) return
-    if (/\[\[[^\]]+$/.test(a) || /\{\{[^}]+$/.test(a) || a.split('{{').length !== a.split('}}').length || a.split('[[').length !== a.split(']]').length) {
+    // Use pre-compiled patterns for unbalanced bracket detection
+    if (PATTERNS.UNBALANCED_LINK.test(a) || PATTERNS.UNBALANCED_TEMPLATE.test(a) || a.split('{{').length !== a.split('}}').length || a.split('[[').length !== a.split(']]').length) {
       arr[i + 1] = arr[i] + '|' + arr[i + 1]; arr[i] = ''
     }
   })
   arr = arr.filter(a => a !== null && a !== '').map(a => (a || '').trim())
   arr.shift()
   return arr
-    .filter(s => !/^[\p{Letter}0-9._/\- '()\t]+=/iu.test(s))
+    .filter(s => !PATTERNS.NAMED_PARAM.test(s))
     .map(s => s.replace(/\[\[([^\]|]+)\|?([^\]]*)\]\]/g, (_, page, text) => text || page).trim())
     .filter(s => s)
 }

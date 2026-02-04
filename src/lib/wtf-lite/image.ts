@@ -4,7 +4,7 @@
 
 import type { ImageData } from './types'
 import { parseSentence } from './links'
-import { FILE_NS_PREFIXES } from './constants'
+import { PATTERNS, getFileNsPrefixPattern } from './constants'
 
 // Default server for Wikimedia image URLs
 const DEFAULT_SERVER = 'wikipedia.org'
@@ -46,8 +46,8 @@ export class Image {
     let file = this._data.file || ''
     if (file) {
       // Check if it already has a file namespace prefix (any language)
-      const fileNsPrefixReg = new RegExp(`^(${FILE_NS_PREFIXES.join('|')}):`, 'i')
-      if (!fileNsPrefixReg.test(file)) {
+      // Use cached pattern instead of building new one each time
+      if (!getFileNsPrefixPattern().test(file)) {
         // If there's no 'File:', add it
         file = `File:${file}`
       }
@@ -55,7 +55,7 @@ export class Image {
       // Titlecase first character
       file = file.charAt(0).toUpperCase() + file.substring(1)
       // Spaces to underscores
-      file = file.replace(/ /g, '_')
+      file = file.replace(PATTERNS.UNDERSCORE, '_')
     }
     return file
   }
@@ -65,11 +65,10 @@ export class Image {
    */
   alt(): string {
     let str = this._data.alt || this._data.file || ''
-    // Strip any file namespace prefix
-    const fileNsPrefixReg = new RegExp(`^(${FILE_NS_PREFIXES.join('|')}):`, 'i')
-    str = str.replace(fileNsPrefixReg, '')
-    str = str.replace(/\.(jpg|jpeg|png|gif|svg|webp|tiff?|bmp)/i, '')
-    return str.replace(/_/g, ' ')
+    // Strip any file namespace prefix using cached pattern
+    str = str.replace(getFileNsPrefixPattern(), '')
+    str = str.replace(PATTERNS.IMAGE_EXTENSION, '')
+    return str.replace(PATTERNS.UNDERSCORE, ' ')
   }
 
   /**
@@ -244,8 +243,8 @@ export function parseImageParams(wiki: string): ImageData {
 
   // First part is always the file name - strip any localized file namespace prefix
   const fileName = parts[0]?.trim() || ''
-  const fileNsPrefixReg = new RegExp(`^(${FILE_NS_PREFIXES.join('|')}):`, 'i')
-  data.file = fileName.replace(fileNsPrefixReg, '')
+  // Use cached pattern instead of building new one each time
+  data.file = fileName.replace(getFileNsPrefixPattern(), '')
 
   // Parse remaining parameters
   for (let i = 1; i < parts.length; i++) {
@@ -273,8 +272,8 @@ export function parseImageParams(wiki: string): ImageData {
       }
     }
     // Check for size (e.g., 300px, 200x150px)
-    else if (/^\d+(\s*x\s*\d+)?px$/i.test(part)) {
-      const sizeMatch = part.match(/^(\d+)(?:\s*x\s*(\d+))?px$/i)
+    else if (PATTERNS.IMAGE_SIZE.test(part)) {
+      const sizeMatch = part.match(PATTERNS.IMAGE_SIZE_EXTRACT)
       if (sizeMatch) {
         if (sizeMatch[2]) {
           // Width x Height format

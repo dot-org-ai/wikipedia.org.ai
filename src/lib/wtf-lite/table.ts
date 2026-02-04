@@ -4,6 +4,7 @@
 
 import { Link, Sentence, parseSentence } from './links'
 import type { TableCellJson, TableJson, TableRowJson } from './types'
+import { PATTERNS } from './constants'
 
 // Re-export types from types.ts for backward compatibility
 export type { TableCellJson, TableRowJson, TableJson } from './types'
@@ -11,10 +12,6 @@ export type { TableCellJson, TableRowJson, TableJson } from './types'
 // ============================================================================
 // TABLE PARSING HELPERS
 // ============================================================================
-
-const getRowSpan = /.*rowspan *= *["']?([0-9]+)["']?[ |]*/i
-const getColSpan = /.*colspan *= *["']?([0-9]+)["']?[ |]*/i
-const isHeading = /^!/
 
 // Common header names for auto-detection
 const headings: Record<string, boolean> = {
@@ -36,15 +33,15 @@ const headings: Record<string, boolean> = {
 function cleanup(lines: string[]): string[] {
   lines = lines.filter(line => {
     // A '|+' row is a 'table caption', remove it
-    return line && !/^\|\+/.test(line)
+    return line && !PATTERNS.TABLE_CAPTION.test(line)
   })
-  if (/^\{\|/.test(lines[0] || '')) {
+  if (PATTERNS.TABLE_OPEN.test(lines[0] || '')) {
     lines.shift()
   }
-  if (/^\|\}/.test(lines[lines.length - 1] || '')) {
+  if (PATTERNS.TABLE_CLOSE.test(lines[lines.length - 1] || '')) {
     lines.pop()
   }
-  if (/^\|-/.test(lines[0] || '')) {
+  if (PATTERNS.ROW_SEPARATOR.test(lines[0] || '')) {
     lines.shift()
   }
   return lines
@@ -63,7 +60,7 @@ function findRows(lines: string[]): string[][] {
     if (!line) continue
 
     // '|-' is a row separator
-    if (/^\|-/.test(line)) {
+    if (PATTERNS.ROW_SEPARATOR.test(line)) {
       if (row.length > 0) {
         rows.push(row)
         row = []
@@ -77,7 +74,7 @@ function findRows(lines: string[]): string[][] {
       }
 
       // Look for '||' inline row-splitter
-      const cells = processedLine.split(/(?:\|\||!!)/)
+      const cells = processedLine.split(PATTERNS.CELL_SEPARATOR)
 
       // Add leading ! back for header detection
       if (startChar === '!') {
@@ -106,11 +103,11 @@ function doColSpan(rows: string[][]): string[][] {
     for (let c = 0; c < row.length; c++) {
       const str = row[c]
       if (!str) continue
-      const m = str.match(getColSpan)
+      const m = str.match(PATTERNS.COLSPAN)
       if (m !== null) {
         const num = parseInt(m[1] || '1', 10)
         // Remove colspan attribute from cell
-        row[c] = str.replace(getColSpan, '')
+        row[c] = str.replace(PATTERNS.COLSPAN, '')
         // Splice in empty columns
         for (let i = 1; i < num; i++) {
           row.splice(c + 1, 0, '')
@@ -129,16 +126,16 @@ function doRowSpan(rows: string[][]): string[][] {
     for (let c = 0; c < row.length; c++) {
       const str = row[c]
       if (!str) continue
-      const m = str.match(getRowSpan)
+      const m = str.match(PATTERNS.ROWSPAN)
       if (m !== null) {
         const num = parseInt(m[1] || '1', 10)
         // Remove rowspan attribute from cell
-        const cleanStr = str.replace(getRowSpan, '')
+        const cleanStr = str.replace(PATTERNS.ROWSPAN, '')
         row[c] = cleanStr
         // Copy this cell down n rows
         for (let i = r + 1; i < r + num; i++) {
           if (!rows[i]) break
-          rows[i].splice(c, 0, cleanStr)
+          rows[i]!.splice(c, 0, cleanStr)
         }
       }
     }
@@ -160,13 +157,13 @@ function handleSpans(rows: string[][]): string[][] {
  */
 function cleanText(str: string): string {
   str = parseSentence(str).text()
-  // Anything before a single-pipe is styling, remove it
-  if (str.match(/\|/)) {
-    str = str.replace(/.*?\| ?/, '')
+  // Anything before a single-pipe is styling, remove it (use indexOf for speed)
+  if (str.indexOf('|') !== -1) {
+    str = str.replace(PATTERNS.CELL_STYLE, '')
   }
-  str = str.replace(/style=['"].*?["']/, '')
+  str = str.replace(PATTERNS.STYLE_ATTR, '')
   // '!' is used as a highlighted column
-  str = str.replace(/^!/, '')
+  str = str.replace(PATTERNS.TABLE_HEADING, '')
   str = str.trim()
   return str
 }
@@ -187,7 +184,7 @@ function skipSpanRow(row: string[]): boolean {
  */
 function removeMidSpans(rows: string[][]): string[][] {
   return rows.filter(row => {
-    if (row.length === 1 && row[0] && isHeading.test(row[0]) && !/rowspan/i.test(row[0])) {
+    if (row.length === 1 && row[0] && PATTERNS.TABLE_HEADING.test(row[0]) && row[0].toLowerCase().indexOf('rowspan') === -1) {
       return false
     }
     return true
@@ -206,9 +203,10 @@ function findHeaders(rows: string[][]): string[] {
   }
 
   const first = rows[0]
-  if (first && first[0] && first[1] && (/^!/.test(first[0]) || /^!/.test(first[1]))) {
+  // Use charAt for faster single-char check
+  if (first && first[0] && first[1] && (first[0].charAt(0) === '!' || first[1].charAt(0) === '!')) {
     headers = first.map(h => {
-      h = h.replace(/^! */, '')
+      if (h.charAt(0) === '!') h = h.substring(1).trimStart()
       h = cleanText(h)
       return h
     })
@@ -217,9 +215,9 @@ function findHeaders(rows: string[][]): string[] {
 
   // Try the second row too (overwrite first-row if it exists)
   const second = rows[0]
-  if (second && second[0] && second[1] && /^!/.test(second[0]) && /^!/.test(second[1])) {
+  if (second && second[0] && second[1] && second[0].charAt(0) === '!' && second[1].charAt(0) === '!') {
     second.forEach((h, i) => {
-      h = h.replace(/^! */, '')
+      if (h.charAt(0) === '!') h = h.substring(1).trimStart()
       h = cleanText(h)
       if (h) {
         headers[i] = h
@@ -243,7 +241,8 @@ function firstRowHeader(rows: string[][]): string[] {
   if (!first) return []
 
   let headers = first.slice(0).map(h => {
-    h = h.replace(/^! */, '')
+    // Use charAt for faster single-char check
+    if (h.charAt(0) === '!') h = h.substring(1).trimStart()
     h = parseSentence(h).text()
     h = cleanText(h)
     h = h.toLowerCase()
@@ -323,7 +322,7 @@ function parseTableContent(wiki: string): Record<string, Sentence>[] {
 function normalize(key: string = ''): string {
   key = key.toLowerCase()
   key = key.replace(/[_-]/g, ' ')
-  key = key.replace(/\(.*?\)/, '')
+  key = key.replace(PATTERNS.KEY_PARENS, '')
   key = key.trim()
   return key
 }
@@ -476,9 +475,6 @@ Table.prototype.keyval = Table.prototype.keyValue
 // TABLE FINDER
 // ============================================================================
 
-const openReg = /^\s*\{\|/
-const closeReg = /^\s*\|\}/
-
 /**
  * Find and parse tables from wiki text
  * Tables can be nested, so we use a stack-based approach
@@ -491,14 +487,14 @@ export function findTables(wiki: string): { tables: Table[]; wiki: string } {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] || ''
 
-    // Start a table
-    if (openReg.test(line)) {
+    // Start a table (use pre-compiled pattern)
+    if (PATTERNS.TABLE_OPEN.test(line)) {
       stack.push(line)
       continue
     }
 
     // Close a table
-    if (closeReg.test(line)) {
+    if (PATTERNS.TABLE_CLOSE.test(line)) {
       if (stack.length > 0) {
         stack[stack.length - 1] += '\n' + line
         const table = stack.pop()

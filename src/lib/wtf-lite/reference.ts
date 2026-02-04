@@ -6,6 +6,7 @@ import type { ReferenceData, ReferenceJson } from './types'
 import { findTemplates } from './utils'
 import { parseTemplateParams } from './templates'
 import { parseSentence, Sentence } from './links'
+import { PATTERNS } from './constants'
 
 // ============================================================================
 // REFERENCE CLASS
@@ -135,9 +136,9 @@ export class Reference {
  * Check if a string contains a structured citation template
  */
 function hasCitation(str: string): boolean {
-  return /^ *\{\{ *(cite|citation)/i.test(str) &&
-    /\}\} *$/.test(str) &&
-    !/citation needed/i.test(str)
+  return PATTERNS.CITATION_START.test(str) &&
+    PATTERNS.CITATION_END.test(str) &&
+    !PATTERNS.CITATION_NEEDED.test(str)
 }
 
 /**
@@ -204,7 +205,7 @@ function parseInline(str: string): ReferenceData {
  * Extract the name attribute from a ref tag
  */
 function extractRefName(tag: string): string | undefined {
-  const match = tag.match(/name\s*=\s*["']?([^"'\s/>]+)["']?/i)
+  const match = tag.match(PATTERNS.REF_NAME)
   return match ? match[1] : undefined
 }
 
@@ -216,8 +217,8 @@ export function parseReferences(wiki: string): { references: Reference[]; wiki: 
   const references: Reference[] = []
   const namedRefs: Map<string, Reference> = new Map()
 
-  // Parse <ref>...</ref> (anonymous refs)
-  wiki = wiki.replace(/ ?<ref>([\s\S]{0,4000}?)<\/ref> ?/gi, (all, txt: string) => {
+  // Parse <ref>...</ref> (anonymous refs) - use pre-compiled pattern
+  wiki = wiki.replace(PATTERNS.REF_ANON, (all, txt: string) => {
     let found = false
 
     // Check for citation templates inside the ref
@@ -240,8 +241,8 @@ export function parseReferences(wiki: string): { references: Reference[]; wiki: 
     return ' '
   })
 
-  // Parse <ref name="...">...</ref> (named refs with content)
-  wiki = wiki.replace(/ ?<ref ([^>]{0,200})>([\s\S]{0,4000}?)<\/ref> ?/gi, (all, attrs: string, txt: string) => {
+  // Parse <ref name="...">...</ref> (named refs with content) - use pre-compiled pattern
+  wiki = wiki.replace(PATTERNS.REF_NAMED, (all, attrs: string, txt: string) => {
     const name = extractRefName(attrs)
     let found = false
 
@@ -271,8 +272,8 @@ export function parseReferences(wiki: string): { references: Reference[]; wiki: 
     return ' '
   })
 
-  // Parse <ref name="..." /> (reference reuse - self-closing)
-  wiki = wiki.replace(/ ?<ref ([^>]{0,200})\/> ?/gi, (all, attrs: string) => {
+  // Parse <ref name="..." /> (reference reuse - self-closing) - use pre-compiled pattern
+  wiki = wiki.replace(PATTERNS.REF_SELF_CLOSE, (all, attrs: string) => {
     const name = extractRefName(attrs)
     if (name && namedRefs.has(name)) {
       // Reuse the existing reference - copy the data structure

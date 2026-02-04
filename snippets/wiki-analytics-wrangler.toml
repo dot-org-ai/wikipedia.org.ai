@@ -1,0 +1,95 @@
+# Wiki Analytics Snippet Configuration
+# Provides observability layer for wiki.org.ai
+#
+# Features:
+# - Caching layer with stale-while-revalidate
+# - Error logging to KV
+# - Analytics tracking (requests, latencies, error rates)
+# - Circuit breaker pattern for graceful degradation
+# - Monitoring endpoints: /_health, /_analytics, /_errors
+#
+# Deployment:
+#   wrangler deploy -c snippets/wiki-analytics-wrangler.toml
+#
+# Note: This snippet must be deployed BEFORE the main wiki-parser snippet
+# as it acts as an outer proxy/cache layer.
+
+name = "wiki-analytics"
+main = "wiki-analytics.ts"
+compatibility_date = "2024-12-01"
+account_id = "b6641681fe423910342b9ffa1364c76d"
+
+# Routes - acts as outer layer for wiki.org.ai
+# Uncomment to enable (currently disabled for testing)
+# routes = [
+#   { pattern = "wiki.org.ai/*", zone_name = "workers.do" }
+# ]
+
+# KV namespace for analytics storage
+# Create with: wrangler kv:namespace create WIKI_ANALYTICS
+# Then update the id below
+[[kv_namespaces]]
+binding = "WIKI_ANALYTICS"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+# Preview namespace for local dev
+preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
+
+[build]
+command = "echo 'No build needed'"
+
+# Observability notes:
+#
+# Monitoring Endpoints:
+# - GET /_health    - Health check with circuit breaker status
+# - GET /_analytics - Request counts, latencies, error rates
+# - GET /_errors    - Recent errors with metadata
+# - POST /_circuit/reset - Reset circuit breaker (emergency use)
+#
+# Response Headers:
+# - X-Cache: HIT | MISS | STALE | BYPASS | HIT-CIRCUIT-OPEN | HIT-ERROR-FALLBACK
+# - X-Latency-Ms: Request latency in milliseconds
+# - X-Served-By: wiki-analytics
+# - X-Version: Snippet version
+#
+# Circuit Breaker:
+# - Opens after 5 failures within 1 minute
+# - Stays open for 30 seconds
+# - Half-open state allows 3 test requests before closing
+# - When open, serves from cache or returns 503
+#
+# Cache Strategy:
+# - TTL: 5 minutes for success, 1 minute for 404
+# - Stale-while-revalidate: 1 hour
+# - Cache-Control headers set appropriately
+#
+# Error Logging:
+# - Stores last 100 errors in KV
+# - Includes: timestamp, URL, method, error, status, user-agent, country, colo
+# - 7 day TTL on error entries
+
+# Environment variables
+[vars]
+# Main worker URL to proxy requests to
+MAIN_WORKER_URL = "https://wikipedia.org.ai"
+
+# Example deployment workflow:
+#
+# 1. Create KV namespace:
+#    wrangler kv:namespace create WIKI_ANALYTICS
+#    wrangler kv:namespace create WIKI_ANALYTICS --preview
+#
+# 2. Update the kv_namespaces.id and preview_id above with the returned IDs
+#
+# 3. Deploy:
+#    wrangler deploy -c snippets/wiki-analytics-wrangler.toml
+#
+# 4. Test monitoring endpoints:
+#    curl https://wiki.org.ai/_health
+#    curl https://wiki.org.ai/_analytics
+#    curl https://wiki.org.ai/_errors
+#
+# 5. Test caching:
+#    curl -I https://wiki.org.ai/Albert_Einstein
+#    # Should show X-Cache: MISS
+#    curl -I https://wiki.org.ai/Albert_Einstein
+#    # Should show X-Cache: HIT

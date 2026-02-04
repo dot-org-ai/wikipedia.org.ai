@@ -3,7 +3,7 @@
  */
 
 import type { LinkData, SentenceData } from './types'
-import { FILE_NS_PREFIXES, ABBREVIATIONS } from './constants'
+import { PATTERNS, getFileNsPattern, getAbbrevPattern } from './constants'
 import { trim } from './utils'
 
 // ============================================================================
@@ -12,7 +12,7 @@ import { trim } from './utils'
 export class Link {
   private data: LinkData
   constructor(data: LinkData = {}) { this.data = { type: 'internal', ...data } }
-  text(s?: string): string { if (s !== undefined) this.data.text = s; return (this.data.text || this.data.page || '').replace(/'{2,}/g, '') }
+  text(s?: string): string { if (s !== undefined) this.data.text = s; return (this.data.text || this.data.page || '').replace(PATTERNS.BOLD_ITALIC_MARKERS, '') }
   page(s?: string): string | undefined { if (s !== undefined) this.data.page = s; return this.data.page }
   type(): string { return this.data.type || 'internal' }
   anchor(): string { return this.data.anchor || '' }
@@ -23,22 +23,30 @@ export class Link {
 // ============================================================================
 // LINK PARSING
 // ============================================================================
-const ignoreLinkNs = /^(category|catégorie|kategorie|categoría|categoria|categorie|image|file|fichier|datei|media):/i
-// ReDoS fix: Use negated character class [^\]]* instead of .*? in optional group
-const extLinkReg = /\[(https?|news|ftp|mailto|gopher|irc)(:\/\/[^\]| ]{4,1500})([| ][^\]]{0,500})?\]/g
-// ReDoS fix: Use negated character class [^\]]* instead of .{0,1600}?
-const linkReg = /\[\[([^\]]{0,1600}?)\]\]([a-z]+)?/gi
+// Use pre-compiled patterns from constants
 
 export function parseLinks(str: string): Link[] {
   const links: Link[] = []
-  str.replace(extLinkReg, (raw, protocol, link, text) => { links.push(new Link({ type: 'external', site: protocol + link, text: (text || '').trim(), raw })); return text || '' })
-  str.replace(linkReg, (raw, s, suffix) => {
+  // External links
+  str.replace(PATTERNS.EXTERNAL_LINK, (raw, link, text) => {
+    // Protocol is captured in the full match, link starts with ://
+    const protocolMatch = raw.match(/\[(https?|news|ftp|mailto|gopher|irc)/)
+    const protocol = protocolMatch?.[1] || 'http'
+    const displayText = typeof text === 'string' ? text.trim() : ''
+    links.push(new Link({ type: 'external', site: protocol + link, text: displayText, raw }))
+    return displayText || ''
+  })
+  // Wiki links
+  str.replace(PATTERNS.WIKI_LINK, (raw, s, suffix) => {
     let txt: string | null = null, link = s
-    // ReDoS fix: Use negated character class [^|]* instead of .{2,1000} and .{0,2000}
-    if (s.match(/\|/)) { link = s.replace(/([^|]{2,1000})\|[^|]{0,2000}/, '$1'); txt = s.replace(/[^|]{2,1000}?\|/, '') }
-    if (link.match(ignoreLinkNs)) return s
+    // Check for pipe using indexOf (faster than regex for simple check)
+    if (s.indexOf('|') !== -1) {
+      link = s.replace(PATTERNS.LINK_BEFORE_PIPE, '$1')
+      txt = s.replace(PATTERNS.LINK_AFTER_PIPE, '')
+    }
+    if (PATTERNS.IGNORE_LINK_NS.test(link)) return s
     const obj: LinkData = { page: link, raw }
-    obj.page = obj.page!.replace(/#(.*)/, (_, b) => { obj.anchor = b; return '' })
+    obj.page = obj.page!.replace(PATTERNS.ANCHOR_HASH, (_, b) => { obj.anchor = b; return '' })
     if (txt !== null && txt !== obj.page) obj.text = txt
     if (suffix) { obj.text = obj.text || obj.page; obj.text += suffix.trim() }
     links.push(new Link(obj))
@@ -51,7 +59,10 @@ export function getLinks(data: { text: string; links?: Link[] }): void {
   data.links = parseLinks(data.text)
   data.links.forEach(l => { if (l.raw()) data.text = data.text.replace(l.raw(), l.text() || l.page() || '') })
   // Remove any remaining file/image links that weren't caught in preProcess
-  const fileNsReg = new RegExp(`\\[\\[(${FILE_NS_PREFIXES.join('|')}):`, 'gi')
+  // Use cached pattern instead of building new one each time
+  const fileNsReg = getFileNsPattern()
+  // Reset lastIndex since this is a global regex that may have been used before
+  fileNsReg.lastIndex = 0
   let match
   while ((match = fileNsReg.exec(data.text)) !== null) {
     const startIdx = match.index
@@ -82,31 +93,31 @@ export class Sentence {
 // ============================================================================
 // SENTENCE PARSING
 // ============================================================================
-const abbrevReg = new RegExp("(^| |')(" + ABBREVIATIONS.join('|') + ")[.!?] ?$", 'i')
-// Regex to detect if a chunk ends with a decimal number (e.g., "US$1" or "scored 2")
-const decimalNumberEndReg = /\d\s*$/
+// Use cached abbreviation pattern
 
 export function splitSentences(text: string): string[] {
   if (!text?.trim()) return []
-  let splits = text.split(/(\n+)/).filter(s => s.match(/\S/))
-  // ReDoS fix: Use negated character class [^\s.!?]* with explicit alternatives instead of .+?
-  splits = splits.flatMap(str => str.split(/(\S[^\n.!?]*[.!?]"?)(?=\s|$)/g))
+  let splits = text.split(PATTERNS.NEWLINE_SPLIT).filter(s => PATTERNS.HAS_CONTENT.test(s))
+  // Use pre-compiled sentence split pattern
+  splits = splits.flatMap(str => str.split(PATTERNS.SENTENCE_SPLIT))
   const chunks: string[] = []
   for (let i = 0; i < splits.length; i++) {
     const s = splits[i]
-    if (!s || !s.match(/\S/)) { const last = chunks[chunks.length - 1]; if (last !== undefined) chunks[chunks.length - 1] = last + (s ?? ''); continue }
+    if (!s || !PATTERNS.HAS_CONTENT.test(s)) { const last = chunks[chunks.length - 1]; if (last !== undefined) chunks[chunks.length - 1] = last + (s ?? ''); continue }
     chunks.push(s)
   }
   const sentences: string[] = []
+  // Get cached abbreviation pattern
+  const abbrevReg = getAbbrevPattern()
   for (let i = 0; i < chunks.length; i++) {
     const current = chunks[i]
     const next = chunks[i + 1]
     if (current === undefined) continue
     // Don't split if current ends with a digit and next starts with a decimal (e.g., "US$1" + ".5 million")
-    const isDecimalSplit = next && decimalNumberEndReg.test(current) && /^\.\d/.test(next)
-    if (next && (isDecimalSplit || abbrevReg.test(current) || /[ .'][A-Z].? *$/i.test(current) || /\.{3,} +$/.test(current))) {
+    const isDecimalSplit = next && PATTERNS.DECIMAL_END.test(current) && next.charCodeAt(0) === 46 && next.charCodeAt(1) >= 48 && next.charCodeAt(1) <= 57
+    if (next && (isDecimalSplit || abbrevReg.test(current) || PATTERNS.INITIAL_END.test(current) || PATTERNS.ELLIPSIS_END.test(current))) {
       // For decimal numbers, don't add a space between the digit and decimal point
-      const needsSpace = !isDecimalSplit && !/^\s/.test(next) && !/\s$/.test(current)
+      const needsSpace = !isDecimalSplit && next.charCodeAt(0) > 32 && current.charCodeAt(current.length - 1) > 32
       chunks[i + 1] = current + (needsSpace ? ' ' : '') + next
     } else if (current.length > 0) { sentences.push(current); chunks[i] = '' }
   }
@@ -115,21 +126,21 @@ export function splitSentences(text: string): string[] {
 
 export function parseSentence(str: string): Sentence {
   const obj: SentenceData = { text: str }
-  // Early exit optimizations
-  const hasLinks = str.includes('[')
-  const hasBold = str.includes("'''")
-  const hasItalic = str.includes("''")
+  // Early exit optimizations using indexOf (faster than includes for single char)
+  const hasLinks = str.indexOf('[') !== -1
+  const hasBold = str.indexOf("'''") !== -1
+  const hasItalic = str.indexOf("''") !== -1
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (hasLinks) getLinks(obj as any)
-  obj.text = trim(obj.text || '').replace(/\([,;: ]*\)/g, '').replace(/ +\.$/, '.')
+  obj.text = trim(obj.text || '').replace(PATTERNS.EMPTY_PARENS, '').replace(PATTERNS.TRAILING_PERIOD, '.')
 
   // Bold/italic - skip if no markers present
   if (hasBold || hasItalic) {
     const bolds: string[] = [], italics: string[] = []
-    obj.text = obj.text.replace(/'''''([^']{0,2500}|'(?!')){0,2500}'''''/g, (_, b) => { bolds.push(b); italics.push(b); return b })
-    obj.text = obj.text.replace(/'''([^']{0,2500}|'(?!')|''(?!')){0,2500}'''/g, (_, b) => { bolds.push(b); return b })
-    obj.text = obj.text.replace(/''([^']{0,2500}|'(?!')){0,2500}''/g, (_, b) => { italics.push(b); return b })
+    obj.text = obj.text.replace(PATTERNS.BOLD_ITALIC, (_, b) => { bolds.push(b); italics.push(b); return b })
+    obj.text = obj.text.replace(PATTERNS.BOLD, (_, b) => { bolds.push(b); return b })
+    obj.text = obj.text.replace(PATTERNS.ITALIC, (_, b) => { italics.push(b); return b })
     if (bolds.length || italics.length) obj.fmt = { bold: bolds.length ? bolds : undefined, italic: italics.length ? italics : undefined }
   }
   return new Sentence(obj)

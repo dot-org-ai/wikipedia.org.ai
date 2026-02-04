@@ -9,9 +9,12 @@ import { Reference, parseReferences } from './reference'
 import { Table, findTables } from './table'
 import {
   DATA, CATEGORIES, INFOBOXES, REDIRECTS, MONTHS, DAYS, CURRENCY,
-  REF_SECTION_NAMES
+  PATTERNS,
+  getRedirectPattern, getCategoryPattern, getCategoryRemovePattern,
+  getInfoboxPattern, getRefSectionPattern,
+  buildInfoboxPattern, buildCategoryPattern, buildCategoryRemovePattern, buildRedirectPattern
 } from './constants'
-import { preProcess, trim, findTemplates } from './utils'
+import { preProcess, trim, findTemplates, stripTemplates } from './utils'
 import {
   parseTemplateParams,
   parseBirthDate, parseDeathDate, parseStartDate, parseAsOf,
@@ -95,27 +98,25 @@ export class Paragraph {
 // ============================================================================
 // LIST PARSING
 // ============================================================================
-const listReg = /^[#*:;|]+/
-const bulletReg = /^\*+[^:,|]{4}/
-const numberReg = /^ ?#[^:,|]{4}/
+// Use pre-compiled patterns from constants
 
 function parseListItems(paragraph: { wiki: string; lists: List[] }): void {
-  const lines = paragraph.wiki.split(/\n/g)
+  const lines = paragraph.wiki.split('\n')
   const lists: Sentence[][] = []
   const theRest: string[] = []
   for (let i = 0; i < lines.length; i++) {
     const currentLine = lines[i]
     if (currentLine === undefined) continue
-    if (listReg.test(currentLine) || bulletReg.test(currentLine) || numberReg.test(currentLine)) {
+    if (PATTERNS.LIST_ITEM.test(currentLine) || PATTERNS.BULLET_LIST.test(currentLine) || PATTERNS.NUMBER_LIST.test(currentLine)) {
       const sub: Sentence[] = []
       let num = 1
       for (let o = i; o < lines.length; o++) {
         const innerLine = lines[o]
         if (innerLine === undefined) break
-        if (!(listReg.test(innerLine) || bulletReg.test(innerLine) || numberReg.test(innerLine))) break
+        if (!(PATTERNS.LIST_ITEM.test(innerLine) || PATTERNS.BULLET_LIST.test(innerLine) || PATTERNS.NUMBER_LIST.test(innerLine))) break
         let line = innerLine
-        if (numberReg.test(line)) { line = line.replace(/^ ?#*/, num + ') ') + '\n'; num++ }
-        else if (listReg.test(line)) { num = 1; line = line.replace(listReg, '') }
+        if (PATTERNS.NUMBER_LIST.test(line)) { line = line.replace(PATTERNS.NUMBER_PREFIX, num + ') ') + '\n'; num++ }
+        else if (PATTERNS.LIST_ITEM.test(line)) { num = 1; line = line.replace(PATTERNS.LIST_ITEM, '') }
         sub.push(parseSentence(line))
       }
       i += sub.length - 1
@@ -140,19 +141,34 @@ export class Section {
   private _coordinates: { lat: number; lon: number }[] = []
   private _tables: Table[] = []
   private _references: Reference[] = []
+  private _options: ParseOptions
 
-  constructor(data: { title: string; depth: number; wiki: string }, doc: Document) {
+  constructor(data: { title: string; depth: number; wiki: string }, doc: Document, options?: ParseOptions) {
     this._title = data.title || ''
     this._depth = data.depth
     this._wiki = data.wiki || ''
+    this._options = options || doc.options()
 
     // Parse tables before templates (tables may contain templates)
-    this.parseTables()
+    if (this._options.parseTables !== false) {
+      this.parseTables()
+    }
+
     // Parse references BEFORE templates so citation templates inside refs are preserved
-    const refResult = parseReferences(this._wiki)
-    this._references = refResult.references
-    this._wiki = refResult.wiki
-    this.parseTemplates(doc)
+    if (this._options.parseRefs !== false) {
+      const refResult = parseReferences(this._wiki)
+      this._references = refResult.references
+      this._wiki = refResult.wiki
+    }
+
+    // Parse templates (expensive operation)
+    if (this._options.parseTemplates !== false) {
+      this.parseTemplates(doc)
+    } else {
+      // Minimal template stripping without full parsing
+      this.stripTemplatesOnly()
+    }
+
     this.parseParagraphs()
   }
 
@@ -181,8 +197,9 @@ export class Section {
 
   private parseTemplates(_doc: Document): void {
     const templates = findTemplates(this._wiki)
+    // Use CDN data or default, with cached pattern builder
     const infos = DATA?.infoboxes || INFOBOXES
-    const infoReg = new RegExp('^(subst.)?(' + infos.join('|') + ')(?=:| |\\n|$)', 'i')
+    const infoReg = DATA?.infoboxes ? buildInfoboxPattern(infos) : getInfoboxPattern()
     const hardcodedCdn = DATA?.hardcoded || {}
     const pronounsCdn = DATA?.pronouns || []
 
@@ -194,8 +211,8 @@ export class Section {
       const name = resolveTemplateAlias(tmpl.name.toLowerCase())
       let replacement = ''
 
-      // Infobox templates
-      if (infoReg.test(name) || /^infobox /i.test(name) || / infobox$/i.test(name)) {
+      // Infobox templates (use pre-compiled patterns)
+      if (infoReg.test(name) || PATTERNS.INFOBOX_PREFIX.test(name) || PATTERNS.INFOBOX_SUFFIX.test(name)) {
         const obj = parseTemplateParams(tmpl.body, 'raw')
         let type = (obj['template'] as string) || ''
         const m = type.match(infoReg)
@@ -481,8 +498,41 @@ export class Section {
     }
   }
 
+  /** Strip templates without parsing them (fast mode) */
+  private stripTemplatesOnly(): void {
+    const templates = findTemplates(this._wiki)
+    if (templates.length === 0) return
+
+    // Only parse infoboxes if requested
+    if (this._options.parseInfobox !== false) {
+      const infos = DATA?.infoboxes || INFOBOXES
+      const infoReg = DATA?.infoboxes ? buildInfoboxPattern(infos) : getInfoboxPattern()
+
+      for (const tmpl of templates) {
+        const name = resolveTemplateAlias(tmpl.name.toLowerCase())
+        if (infoReg.test(name) || PATTERNS.INFOBOX_PREFIX.test(name) || PATTERNS.INFOBOX_SUFFIX.test(name)) {
+          const obj = parseTemplateParams(tmpl.body, 'raw')
+          let type = (obj['template'] as string) || ''
+          const m = type.match(infoReg)
+          if (m?.[0]) type = type.replace(m[0], '').trim()
+          delete obj['template']; delete obj['list']
+          this._infoboxes.push(new Infobox({ type, data: obj as Record<string, Sentence> }))
+        }
+      }
+    }
+
+    // Strip all templates from wiki text
+    this._wiki = stripTemplates(this._wiki, templates)
+  }
+
   private parseParagraphs(): void {
-    const paras = this._wiki.split(/\r?\n\r?\n/).filter(p => p?.trim())
+    let paras = this._wiki.split(PATTERNS.PARAGRAPH_SPLIT).filter(p => p?.trim())
+
+    // Only process first paragraph if requested
+    if (this._options.firstParagraphOnly && paras.length > 0) {
+      paras = [paras[0]!]
+    }
+
     this._paragraphs = paras.map(str => {
       const p: { wiki: string; lists: List[]; sentences: Sentence[] } = { wiki: str, lists: [], sentences: [] }
       parseListItems(p)
@@ -496,23 +546,27 @@ export class Section {
 // ============================================================================
 // SECTION PARSING
 // ============================================================================
-const sectionReg = /(?:\n|^)(={2,6}[^=\n]{1,200}?={2,6})/g
-const headingReg = /^(={1,6})([^=\n]{1,200}?)={1,6}$/
+// Use pre-compiled patterns from constants
 
-export function parseSections(doc: Document): Section[] {
+export function parseSections(doc: Document, options?: ParseOptions): Section[] {
   const wiki = doc.wiki()
-  const splits = wiki.split(sectionReg)
+  const splits = wiki.split(PATTERNS.SECTION_SPLIT)
   const sections: Section[] = []
+  const maxSections = options?.maxSections || 0
   for (let i = 0; i < splits.length; i += 2) {
+    // Early exit if we've reached maxSections limit
+    if (maxSections > 0 && sections.length >= maxSections) break
+
     const heading = splits[i - 1] || '', content = splits[i] || ''
     if (!content && !heading) continue
     let title = '', depth = 0
-    const m = heading.match(headingReg)
+    const m = heading.match(PATTERNS.HEADING_EXTRACT)
     if (m) { title = trim(parseSentence(m[2] || '').text()); depth = m[1] ? m[1].length - 2 : 0 }
-    sections.push(new Section({ title, depth, wiki: content }, doc))
+    sections.push(new Section({ title, depth, wiki: content }, doc, options))
   }
+  // Use cached ref section pattern
+  const refReg = getRefSectionPattern()
   return sections.filter((s, i) => {
-    const refReg = new RegExp('^(' + REF_SECTION_NAMES.join('|') + '):?', 'i')
     if (refReg.test(s.title())) {
       if (s.paragraphs().length || s.templates().length) return true
       const nextSection = sections[i + 1]
@@ -521,6 +575,27 @@ export function parseSections(doc: Document): Section[] {
     }
     return true
   })
+}
+
+// ============================================================================
+// PARSING OPTIONS
+// ============================================================================
+export interface ParseOptions {
+  title?: string
+  /** Parse section content (paragraphs, sentences) - default true */
+  parseSections?: boolean
+  /** Parse infobox templates - default true */
+  parseInfobox?: boolean
+  /** Parse references - default true */
+  parseRefs?: boolean
+  /** Parse tables - default true */
+  parseTables?: boolean
+  /** Parse templates (expensive) - default true */
+  parseTemplates?: boolean
+  /** Maximum number of sections to parse (0 = all) - default 0 */
+  maxSections?: number
+  /** Only parse the first paragraph of each section - default false */
+  firstParagraphOnly?: boolean
 }
 
 // ============================================================================
@@ -534,19 +609,31 @@ export class Document {
   private _images: Image[] = []
   private _type: string = 'page'
   private _redirectTo: Link | null = null
+  private _options: ParseOptions
 
-  constructor(wiki: string, options: { title?: string } = {}) {
+  constructor(wiki: string, options: ParseOptions = {}) {
     this._wiki = wiki || ''
     this._title = options.title || null
+    this._options = {
+      parseSections: options.parseSections ?? true,
+      parseInfobox: options.parseInfobox ?? true,
+      parseRefs: options.parseRefs ?? true,
+      parseTables: options.parseTables ?? true,
+      parseTemplates: options.parseTemplates ?? true,
+      maxSections: options.maxSections ?? 0,
+      firstParagraphOnly: options.firstParagraphOnly ?? false,
+    }
 
+    // Use CDN data or default, with cached pattern builder
     const reds = DATA?.redirects || REDIRECTS
-    const redirectReg = new RegExp('^\\s*#(' + reds.join('|') + ')\\s*(\\[\\[[^\\]]{2,180}?\\]\\])', 'i')
+    const redirectReg = DATA?.redirects ? buildRedirectPattern(reds) : getRedirectPattern()
 
     if (redirectReg.test(this._wiki)) {
       this._type = 'redirect'
       const m = this._wiki.match(redirectReg)
-      if (m?.[2]) {
-        const links = parseLinks(m[2])
+      // Pattern captures link in group 1 (redirect word uses non-capturing group)
+      if (m?.[1]) {
+        const links = parseLinks(m[1])
         this._redirectTo = links[0] || null
       }
       this.parseCategories()
@@ -557,17 +644,24 @@ export class Document {
     this._wiki = processed.text
     this._images = processed.images
     this.parseCategories()
-    this._sections = parseSections(this)
+
+    if (this._options.parseSections) {
+      this._sections = parseSections(this, this._options)
+    }
   }
 
+  /** Get parsing options */
+  options(): ParseOptions { return this._options }
+
   private parseCategories(): void {
+    // Use CDN data or default, with cached pattern builder
     const cats = DATA?.categories || CATEGORIES
-    const catReg = new RegExp('\\[\\[(' + cats.join('|') + '):([^\\]]{2,178}?)\\]\\](\\w{0,10})', 'gi')
-    const catRemoveReg = new RegExp('^\\[\\[:?(' + cats.join('|') + '):', 'gi')
+    const catReg = DATA?.categories ? buildCategoryPattern(cats) : getCategoryPattern()
+    const catRemoveReg = DATA?.categories ? buildCategoryRemovePattern(cats) : getCategoryRemovePattern()
     const matches = this._wiki.match(catReg) || []
     for (let c of matches) {
-      c = c.replace(catRemoveReg, '').replace(/\|?[ *]?\]\]$/, '').replace(/\|.*/, '')
-      if (c && !c.match(/[[\]]/)) this._categories.push(c.trim())
+      c = c.replace(catRemoveReg, '').replace(PATTERNS.CATEGORY_END, '').replace(PATTERNS.CATEGORY_PIPE, '')
+      if (c && !PATTERNS.BRACKET_CHECK.test(c)) this._categories.push(c.trim())
     }
     this._wiki = this._wiki.replace(catReg, '')
   }
