@@ -1,14 +1,14 @@
 /**
  * End-to-End Tests for Deployed Wikipedia Worker
  *
- * Tests the production worker at wiki.org.ai (or configured test URL)
+ * Tests the production worker at wikipedia.org.ai (or configured test URL)
  * and asserts that CPU time stays under specified limits.
  *
  * Run with: bun test test/e2e/
  * Skip with: SKIP_E2E=true bun test
  *
  * Environment variables:
- * - E2E_BASE_URL: Base URL of the deployed worker (default: https://wiki.org.ai)
+ * - E2E_BASE_URL: Base URL of the deployed worker (default: https://wikipedia.org.ai)
  * - SKIP_E2E: Set to 'true' to skip E2E tests
  * - E2E_TIMEOUT_MS: Request timeout in milliseconds (default: 30000)
  * - E2E_RETRIES: Number of retries for flaky requests (default: 2)
@@ -334,6 +334,80 @@ describeE2E('Deployed Worker E2E Tests', () => {
         });
       });
     }
+  });
+
+  // ==========================================================================
+  // Format-Specific Tests (Critical for wtf_wikipedia integration)
+  // ==========================================================================
+
+  describe('Format Extensions', () => {
+    const testTitle = 'Albert_Einstein';
+
+    it(`GET /${testTitle}.md should return markdown content`, async () => {
+      const url = `${e2eConfig.baseUrl}/${testTitle}.md`;
+      const response = await fetchWithRetry(url);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toContain('text/markdown');
+
+      const body = await response.text();
+      expect(body).toContain('# Albert Einstein');
+    });
+
+    it(`GET /${testTitle}.json should return valid JSON with expected fields`, async () => {
+      const url = `${e2eConfig.baseUrl}/${testTitle}.json`;
+      const response = await fetchWithRetry(url);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toContain('application/json');
+
+      const data = await response.json() as { title: string; sections: unknown[]; categories: unknown[] };
+      expect(data).toHaveProperty('title');
+      expect(data).toHaveProperty('sections');
+      expect(data).toHaveProperty('categories');
+      expect(data.title).toBe('Albert Einstein');
+    });
+
+    it(`GET /${testTitle}.txt should return plain text`, async () => {
+      const url = `${e2eConfig.baseUrl}/${testTitle}.txt`;
+      const response = await fetchWithRetry(url);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toContain('text/plain');
+
+      const body = await response.text();
+      expect(body.length).toBeGreaterThan(100);
+    });
+
+    it('GET /Tokyo.json should return 200 (regression test for large article timeout)', async () => {
+      const url = `${e2eConfig.baseUrl}/Tokyo.json`;
+      const response = await fetchWithRetry(url);
+
+      // This previously caused Error 1102 (CPU timeout) with wtf-lite
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toContain('application/json');
+
+      const responseTime = response.headers.get('X-Response-Time');
+      const timeMs = parseResponseTime(responseTime);
+
+      // Should complete in reasonable time (< 50ms for worker CPU)
+      expect(timeMs).not.toBeNull();
+      expect(timeMs).toBeLessThanOrEqual(
+        e2eConfig.cpuLimitWorkerMs,
+        `Tokyo.json response time ${timeMs}ms exceeded CPU limit ${e2eConfig.cpuLimitWorkerMs}ms - potential regression`
+      );
+    });
+
+    it('GET /fr/Paris should return French Wikipedia article', async () => {
+      const url = `${e2eConfig.baseUrl}/fr/Paris`;
+      const response = await fetchWithRetry(url);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toContain('text/markdown');
+
+      const body = await response.text();
+      expect(body).toContain('# Paris');
+    });
   });
 
   // ==========================================================================

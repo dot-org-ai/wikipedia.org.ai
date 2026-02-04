@@ -38,7 +38,7 @@ export interface E2EConfig {
  */
 export function loadE2EConfig(): E2EConfig {
   return {
-    baseUrl: process.env.E2E_BASE_URL || 'https://wiki.org.ai',
+    baseUrl: process.env.E2E_BASE_URL || 'https://wikipedia.org.ai',
     skipE2E: process.env.SKIP_E2E === 'true' || process.env.SKIP_E2E === '1',
     requestTimeoutMs: parseInt(process.env.E2E_TIMEOUT_MS || '30000', 10),
     retries: parseInt(process.env.E2E_RETRIES || '2', 10),
@@ -71,6 +71,7 @@ export const TEST_ARTICLES = {
   /** Large articles (> 100KB typically) */
   large: [
     'Tokyo',
+    'Albert_Einstein',
     'United_States',
     'World_War_II',
   ],
@@ -80,10 +81,14 @@ export const TEST_ARTICLES = {
  * All test endpoints with their expected behavior
  */
 export const TEST_ENDPOINTS = {
-  /** Article title route - returns HTML */
+  /** Article title route - returns Markdown (default) */
   title: (title: string) => `/${title}`,
+  /** Markdown route - explicit .md extension */
+  md: (title: string) => `/${title}.md`,
   /** JSON route - returns full article JSON */
   json: (title: string) => `/${title}.json`,
+  /** Plain text route */
+  txt: (title: string) => `/${title}.txt`,
   /** Summary route - returns article summary */
   summary: (title: string) => `/${title}/summary`,
   /** Infobox route - returns article infobox */
@@ -99,11 +104,16 @@ export type RouteType = 'worker' | 'snippet';
  * Get the route type for CPU limit assertions
  */
 export function getRouteType(endpoint: string): RouteType {
-  // Summary and infobox are snippet routes (lighter operations)
-  if (endpoint.includes('/summary') || endpoint.includes('/infobox')) {
+  // Summary, infobox, links, categories are snippet routes (lighter operations)
+  if (
+    endpoint.includes('/summary') ||
+    endpoint.includes('/infobox') ||
+    endpoint.includes('/links') ||
+    endpoint.includes('/categories')
+  ) {
     return 'snippet';
   }
-  // Full article and JSON are worker routes
+  // Full article (md, json, txt) are worker routes
   return 'worker';
 }
 
