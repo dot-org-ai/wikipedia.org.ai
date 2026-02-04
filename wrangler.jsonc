@@ -1,0 +1,56 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "wikipedia-org-ai",
+  "main": "dist/workers/api/index.js",
+  "compatibility_date": "2026-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Tail worker for CPU/event monitoring
+  "tail_consumers": [
+    { "service": "wikipedia-tail" }
+  ],
+
+  // R2 bucket for data storage
+  "r2_buckets": [
+    { "binding": "R2", "bucket_name": "wikipedia-data" }
+  ],
+
+  // AI binding for Workers AI
+  "ai": {
+    "binding": "AI"
+  },
+
+  // Environment variables
+  "vars": {
+    "AI_GATEWAY_URL": "https://gateway.ai.cloudflare.com/v1/{account_id}/wikipedia"
+  },
+
+  // Environment configurations
+  "env": {
+    "staging": {
+      "name": "wikipedia-org-ai-staging",
+      "vars": {
+        "ENVIRONMENT": "staging"
+      }
+    },
+    "production": {
+      "name": "wikipedia-org-ai",
+      "routes": [
+        { "pattern": "wikipedia.org.ai/*", "zone_name": "workers.do" }
+      ],
+      "vars": {
+        "ENVIRONMENT": "production",
+        "AI_GATEWAY_URL": "https://gateway.ai.cloudflare.com/v1/{account_id}/wikipedia"
+      },
+      "r2_buckets": [
+        { "binding": "R2", "bucket_name": "wikipedia-data" }
+      ],
+      "ai": {
+        "binding": "AI"
+      },
+      "tail_consumers": [
+        { "service": "wikipedia-tail" }
+      ]
+    }
+  }
+}
