@@ -15,7 +15,8 @@
  * - E2E_RETRIES: Number of retries for flaky requests (default: 2)
  * - E2E_CPU_LIMIT_WORKER_MS: CPU limit for worker routes (default: 50)
  * - E2E_CPU_LIMIT_SNIPPET_MS: CPU limit for snippet routes (default: 5)
- * - E2E_TAIL_URL: URL of tail worker for CPU time validation (default: https://tail.wikipedia.org.ai)
+ *
+ * Tail events endpoint: {E2E_BASE_URL}/_tail/events (queries actual CPU time from tail worker)
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -575,19 +576,20 @@ describeE2E('Deployed Worker E2E Tests', () => {
 // ==========================================================================
 
 describe('Worker CPU Time (from Tail Events)', () => {
-  const tailUrl = process.env.E2E_TAIL_URL || 'https://tail.wikipedia.org.ai';
+  // Use main worker's /_tail/events endpoint
+  const tailEventsUrl = `${process.env.E2E_BASE_URL || 'https://wikipedia.org.ai'}/_tail/events`;
   let tailAccessible = false;
 
   beforeAll(async () => {
-    // Check if tail worker is accessible
+    // Check if tail events endpoint is accessible
     try {
-      const response = await fetch(tailUrl, { signal: AbortSignal.timeout(5000) });
+      const response = await fetch(tailEventsUrl, { signal: AbortSignal.timeout(5000) });
       tailAccessible = response.ok;
       if (!tailAccessible) {
-        console.log(`Tail worker not accessible at ${tailUrl}`);
+        console.log(`Tail events not accessible at ${tailEventsUrl}`);
       }
     } catch (error) {
-      console.log(`Tail worker not accessible at ${tailUrl}: ${error}`);
+      console.log(`Tail events not accessible at ${tailEventsUrl}: ${error}`);
     }
   });
 

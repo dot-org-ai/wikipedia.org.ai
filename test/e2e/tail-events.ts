@@ -12,6 +12,10 @@ export interface TraceEvent {
   scriptName: string | null;
   outcome: 'ok' | 'exceededCpu' | 'exceededMemory' | 'exception' | 'unknown';
   eventTimestamp: number | null;
+  /** CPU time in milliseconds (at top level of trace event) */
+  cpuTime?: number;
+  /** Wall clock time in milliseconds */
+  wallTime?: number;
   event: {
     request?: {
       url: string;
@@ -95,16 +99,20 @@ export async function queryTailEvents(
 
 /**
  * Extract CPU time from a trace event
- * CPU time is in the diagnosticsChannelEvents array
+ * CPU time is at the top level of the event object
  */
 export function extractCpuTime(event: TraceEvent): number | null {
-  if (!event.diagnosticsChannelEvents || !Array.isArray(event.diagnosticsChannelEvents)) {
-    return null;
+  // cpuTime is at the top level of the trace event
+  if (typeof event.cpuTime === 'number') {
+    return event.cpuTime;
   }
 
-  for (const diag of event.diagnosticsChannelEvents) {
-    if (typeof diag === 'object' && diag !== null && typeof diag.cpuTime === 'number') {
-      return diag.cpuTime;
+  // Fallback: check diagnosticsChannelEvents
+  if (event.diagnosticsChannelEvents && Array.isArray(event.diagnosticsChannelEvents)) {
+    for (const diag of event.diagnosticsChannelEvents) {
+      if (typeof diag === 'object' && diag !== null && typeof diag.cpuTime === 'number') {
+        return diag.cpuTime;
+      }
     }
   }
 

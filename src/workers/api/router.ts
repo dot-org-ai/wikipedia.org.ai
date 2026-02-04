@@ -450,18 +450,24 @@ export function createWikiRouter(): Router {
     const urlFilter = ctx.query.get('url');
 
     try {
-      // List recent tail log files
+      // List ALL tail log files to find the newest ones
+      // R2 list returns in ascending order, we need descending (newest first)
       const listed = await bucket.list({
         prefix: 'tail/',
-        limit: Math.min(limit, 50),
+        limit: 1000, // Get all files to sort properly
       });
 
       const allEvents: unknown[] = [];
 
-      // Sort by key (timestamp) descending
+      // Sort by key (timestamp) descending to get newest first
       const sortedObjects = listed.objects.sort((a, b) => b.key.localeCompare(a.key));
 
-      for (const obj of sortedObjects.slice(0, limit)) {
+      // Only read the most recent files
+      const filesToRead = Math.min(limit, 20, sortedObjects.length);
+      for (let i = 0; i < filesToRead; i++) {
+        const obj = sortedObjects[i];
+        if (!obj) continue;
+
         const object = await bucket.get(obj.key);
         if (object) {
           const text = await object.text();
