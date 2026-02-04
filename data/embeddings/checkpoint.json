@@ -1,0 +1,250 @@
+{
+  "lastProcessedId": "",
+  "totalProcessed": 0,
+  "model": "bge-m3",
+  "errors": [
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    },
+    {
+      "id": "",
+      "error": "HTTP 401: Unauthorized"
+    }
+  ],
+  "startedAt": "2026-02-03T19:36:10.320Z",
+  "updatedAt": "2026-02-03T19:36:10.932Z",
+  "completed": true
+}

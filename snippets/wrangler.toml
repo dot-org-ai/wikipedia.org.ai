@@ -1,0 +1,64 @@
+# Cloudflare Snippet Configuration
+# Wikipedia article lookup and vector search service
+# See: https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/
+
+name = "wikipedia-lookup"
+main = "lookup.js"
+compatibility_date = "2024-12-01"
+compatibility_flags = []
+
+# Snippet constraints
+# - Must be <1MB total (actual: ~350KB)
+# - No Durable Objects
+# - No KV bindings
+# - Limited CPU time per request
+
+# Environment variables - set via wrangler var
+[vars]
+# Base URL for R2 bucket containing embeddings
+R2_BASE_URL = "https://wikipedia-embeddings.r2.dev"
+
+# Build configuration
+[build]
+# No build step needed - pure JS/TS
+command = "echo 'No build needed for Snippet'"
+cwd = "snippets"
+
+# Triggers for deployment
+[triggers]
+# Optional: Automatically deploy on git push
+# crons = ["0 2 * * *"]  # Deploy daily at 2 AM UTC
+
+# Size monitoring
+# Current size: ~350KB (well under 1MB limit)
+# Breakdown:
+# - lookup.js: ~40KB
+# - cosine.js: ~2KB
+# - embeddings-top10k.js: ~256KB
+# - Dependencies: ~52KB
+
+# Snippet-specific constraints:
+# 1. Size limit: <1MB including all dependencies
+# 2. No persistent storage - use Cache API or fetch from R2
+# 3. Limited CPU time per request (~50ms)
+# 4. Memory cached between requests (for hot caching)
+# 5. No access to:
+#    - [[kv_namespaces]]
+#    - [[durable_objects]]
+#    - [[r2_buckets]]
+#    - [[d1_databases]]
+#    - [[queues]]
+#    - [[services]]
+#    - [[analytics_engine_datasets]]
+
+# Logging configuration
+# Configure in Cloudflare dashboard: Analytics > Logs
+# Logging is sent to Cloudflare Logpush
+
+# Environment secrets (set via wrangler secret)
+# Commands:
+#   wrangler secret put CF_ACCOUNT_ID -c snippets/wrangler.toml
+#   wrangler secret put AI_GATEWAY_ID -c snippets/wrangler.toml
+#
+# CF_ACCOUNT_ID - Cloudflare account ID (for AI Gateway access)
+# AI_GATEWAY_ID - AI Gateway ID (for embedding generation)

@@ -1,0 +1,53 @@
+# Wikipedia Tail Worker Configuration
+#
+# This worker receives execution traces from the main Wikipedia API worker
+# and monitors for CPU/memory issues and exceptions.
+#
+# Deploy with: wrangler deploy -c src/workers/tail/wrangler.toml
+
+name = "wikipedia-tail"
+main = "index.ts"
+compatibility_date = "2024-01-01"
+
+# R2 bucket for storing processed logs
+[[r2_buckets]]
+binding = "LOGS_BUCKET"
+bucket_name = "wikipedia-logs"
+
+# Analytics Engine for metrics
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "wikipedia_metrics"
+
+# Environment variables
+[vars]
+ENVIRONMENT = "production"
+
+# Optional: Alert webhook URL (set via secrets)
+# Use: wrangler secret put ALERT_WEBHOOK_URL -c src/workers/tail/wrangler.toml
+
+# Staging environment
+[env.staging]
+name = "wikipedia-tail-staging"
+vars = { ENVIRONMENT = "staging" }
+
+[[env.staging.r2_buckets]]
+binding = "LOGS_BUCKET"
+bucket_name = "wikipedia-logs-staging"
+
+[[env.staging.analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "wikipedia_metrics_staging"
+
+# Production environment
+[env.production]
+name = "wikipedia-tail"
+vars = { ENVIRONMENT = "production" }
+
+[[env.production.r2_buckets]]
+binding = "LOGS_BUCKET"
+bucket_name = "wikipedia-logs"
+
+[[env.production.analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "wikipedia_metrics"

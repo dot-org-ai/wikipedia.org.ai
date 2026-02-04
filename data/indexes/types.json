@@ -1,0 +1,20 @@
+{
+  "person": [
+    "data/person/person.0.parquet"
+  ],
+  "place": [
+    "data/place/place.0.parquet"
+  ],
+  "org": [
+    "data/org/org.0.parquet"
+  ],
+  "work": [
+    "data/work/work.0.parquet"
+  ],
+  "event": [
+    "data/event/event.0.parquet"
+  ],
+  "other": [
+    "data/other/other.0.parquet"
+  ]
+}

@@ -1,0 +1,53 @@
+{{Infobox scientist
+| name = Marie Curie
+| birth_date = {{birth date|1867|11|7}}
+| birth_place = [[Warsaw]], [[Congress Poland]], [[Russian Empire]]
+| death_date = {{death date and age|1934|7|4|1867|11|7}}
+| death_place = [[Passy, Haute-Savoie|Passy]], France
+| field = [[Physics]], [[Chemistry]]
+| alma_mater = [[University of Paris]]
+| known_for = [[Radioactivity]], [[Polonium]], [[Radium]]
+| awards = [[Nobel Prize in Physics]] (1903), [[Nobel Prize in Chemistry]] (1911)
+}}
+
+'''Marie Salomea Skłodowska Curie''' ({{IPAc-en|ˈ|k|jʊər|i}}, born '''Maria Salomea Skłodowska'''; 7 November 1867 – 4 July 1934) was a Polish and naturalized-French physicist and chemist who conducted pioneering research on [[radioactivity]].
+
+She was the first woman to win a [[Nobel Prize]], the first person to win a Nobel Prize twice, and the only person to win a Nobel Prize in two scientific fields. Her husband, [[Pierre Curie]], was a co-winner of her first Nobel Prize, making them the first-ever married couple to win the Nobel Prize and launching the [[Curie family]] legacy of five Nobel Prizes.
+
+== Early life ==
+
+Maria Sklodowska was born in [[Warsaw]], in [[Congress Poland]] in the [[Russian Empire]], the fifth and youngest child of well-known teachers. Both her older sisters and her brother became educators.
+
+=== Education ===
+
+At first, she could not attend the male-only [[University of Warsaw]], so she worked as a [[governess]] to support her older sister Bronisława's medical studies in Paris.
+
+== Scientific career ==
+
+=== Discovery of radioactivity ===
+
+Curie's systematic studies included two uranium minerals, [[pitchblende]] and [[torbernite]]. Her electrometer showed that pitchblende was four times as active as uranium itself, and chalcolite twice as active. She concluded that, if her earlier results relating the activity to the presence of uranium were correct, then these two minerals must contain small quantities of another substance that was far more active than uranium.
+
+{{Quote|text=Nothing in life is to be feared, it is only to be understood. Now is the time to understand more, so that we may fear less.|author=Marie Curie}}
+
+=== Nobel Prizes ===
+
+In 1903, the [[Royal Swedish Academy of Sciences]] awarded Pierre Curie, Marie Curie, and [[Henri Becquerel]] the Nobel Prize in Physics, "in recognition of the extraordinary services they have rendered by their joint researches on the radiation phenomena discovered by Professor Henri Becquerel."
+
+[[File:Marie_Curie_c._1920s.jpg|thumb|right|Marie Curie in her laboratory, c. 1920s]]
+
+Marie became the first woman to be awarded a Nobel Prize. Eight years later, she received the 1911 Nobel Prize in Chemistry "in recognition of her services to the advancement of chemistry by the discovery of the elements [[radium]] and [[polonium]], by the isolation of radium and the study of the nature and compounds of this remarkable element."
+
+== Legacy ==
+
+Curie died in 1934, aged 66, at the Sancellemoz sanatorium in [[Passy, Haute-Savoie|Passy]] (Haute-Savoie), France, of [[aplastic anemia]] from exposure to radiation in the course of her scientific research.
+
+[[Category:1867 births]]
+[[Category:1934 deaths]]
+[[Category:Polish physicists]]
+[[Category:Polish chemists]]
+[[Category:Nobel laureates in Physics]]
+[[Category:Nobel laureates in Chemistry]]
+[[Category:Women Nobel laureates]]
+[[Category:People from Warsaw]]
+[[Category:University of Paris alumni]]

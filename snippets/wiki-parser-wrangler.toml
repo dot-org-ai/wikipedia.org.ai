@@ -1,0 +1,18 @@
+# DEPRECATED: Wiki parser snippet
+# This snippet has been replaced by src/workers/api/handlers/wiki.ts
+# The main worker now handles wiki.org.ai traffic with 50ms+ CPU limit.
+# The snippet's 5ms CPU limit caused Error 1102 on large articles like Tokyo.
+# See: wikipedia-es7
+#
+# Keeping this file for reference - do not redeploy with routes enabled.
+
+name = "wiki-parser"
+main = "wiki-parser.js"
+compatibility_date = "2024-12-01"
+account_id = "b6641681fe423910342b9ffa1364c76d"
+
+# Routes - DISABLED: Now handled by main worker (see wrangler.toml)
+# Snippet had 5ms CPU limit causing Error 1102 on large articles
+# routes = [
+#   { pattern = "wiki-parser.workers.do/*", zone_name = "workers.do" }
+# ]

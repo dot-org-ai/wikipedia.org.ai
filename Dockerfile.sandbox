@@ -1,0 +1,46 @@
+# Cloudflare Container for Wikipedia Ingestion
+#
+# This container runs long-running Wikipedia dump processing jobs
+# using Bun runtime with S3 API access to R2.
+#
+# IMPORTANT: Run `npm run build` locally before building this Docker image.
+# The build copies pre-built dist/ and node_modules/ to avoid needing
+# local file dependencies (parquedb, hyparquet-writer) in the Docker context.
+#
+# Build context: project root
+# Build command: docker build -f Dockerfile.sandbox -t wikipedia-ingest .
+
+FROM oven/bun:1.3-slim
+
+WORKDIR /app
+
+# Copy pre-installed node_modules (must run `npm install` locally first)
+# This includes the local file dependencies that can't be resolved in Docker
+COPY node_modules/ ./node_modules/
+
+# Copy pre-built TypeScript output
+COPY dist/ ./dist/
+
+# Copy source files needed at runtime
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+COPY package.json ./
+
+# Environment variables (defaults, will be overridden by Container class)
+ENV MODE=ingest
+ENV BATCH_SIZE=5000
+ENV CHECKPOINT_INTERVAL=10000
+ENV HTTP_PORT=8080
+ENV SKIP_REDIRECTS=true
+ENV SKIP_DISAMBIGUATION=true
+ENV LOG_INTERVAL=1000
+
+# Expose the HTTP port for health checks and status
+EXPOSE 8080
+
+# Run the local ingestion script
+# Arguments can be passed via environment or overridden at runtime:
+# - --simple : Use Simple Wikipedia instead of English Wikipedia
+# - --limit N : Process only N articles
+# - --no-embeddings : Skip embedding generation
+CMD ["bun", "run", "scripts/run-local-ingest.ts"]

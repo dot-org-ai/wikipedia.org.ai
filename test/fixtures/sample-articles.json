@@ -1,0 +1,213 @@
+{
+  "articles": [
+    {
+      "title": "Albert Einstein",
+      "id": 736,
+      "plaintext": "Albert Einstein (14 March 1879 – 18 April 1955) was a German-born theoretical physicist who is widely held to be one of the greatest and most influential scientists of all time. Einstein is best known for developing the theory of relativity, but he also made important contributions to the development of the theory of quantum mechanics. Relativity and quantum mechanics are the two pillars of modern physics. His mass–energy equivalence formula E = mc², which arises from relativity theory, has been dubbed \"the world's most famous equation\".",
+      "infoboxes": [
+        {
+          "type": "scientist",
+          "data": {
+            "name": "Albert Einstein",
+            "birth_date": "14 March 1879",
+            "birth_place": "Ulm, German Empire",
+            "death_date": "18 April 1955",
+            "death_place": "Princeton, New Jersey, U.S.",
+            "field": "Physics",
+            "alma_mater": "ETH Zurich",
+            "known_for": "General relativity, Special relativity, Photoelectric effect"
+          }
+        }
+      ],
+      "links": [
+        { "page": "Physics", "text": "physicist" },
+        { "page": "Theory of relativity", "text": "theory of relativity" },
+        { "page": "Quantum mechanics", "text": "quantum mechanics" },
+        { "page": "Modern physics", "text": "modern physics" }
+      ],
+      "categories": [
+        "1879 births",
+        "1955 deaths",
+        "German physicists",
+        "Nobel laureates in Physics",
+        "People from Ulm"
+      ],
+      "isRedirect": false,
+      "isDisambiguation": false,
+      "timestamp": "2024-01-15T10:30:00Z",
+      "type": "person"
+    },
+    {
+      "title": "Tokyo",
+      "id": 30057,
+      "plaintext": "Tokyo is the capital and most populous prefecture of Japan. Located at the head of Tokyo Bay, the prefecture forms part of the Kantō region on the central Pacific coast of Japan's main island, Honshu. Tokyo is the political and economic center of the country, as well as the seat of the Emperor of Japan and the national government. The Greater Tokyo Area is the most populous metropolitan area in the world.",
+      "infoboxes": [
+        {
+          "type": "settlement",
+          "data": {
+            "name": "Tokyo",
+            "native_name": "東京",
+            "settlement_type": "Metropolis",
+            "subdivision_name": "Japan",
+            "population_total": "13960000",
+            "area_total_km2": "2194"
+          }
+        }
+      ],
+      "links": [
+        { "page": "Japan", "text": "Japan" },
+        { "page": "Tokyo Bay", "text": "Tokyo Bay" },
+        { "page": "Kantō region", "text": "Kantō region" },
+        { "page": "Honshu", "text": "Honshu" }
+      ],
+      "categories": [
+        "Tokyo",
+        "Capitals in Asia",
+        "Cities in Japan",
+        "Populated places in Tokyo"
+      ],
+      "isRedirect": false,
+      "isDisambiguation": false,
+      "timestamp": "2024-01-14T08:00:00Z",
+      "type": "place"
+    },
+    {
+      "title": "Microsoft",
+      "id": 19001,
+      "plaintext": "Microsoft Corporation is an American multinational technology corporation headquartered in Redmond, Washington. Microsoft's best-known software products are the Windows line of operating systems, the Microsoft 365 suite of productivity applications, and the Internet Explorer and Edge web browsers.",
+      "infoboxes": [
+        {
+          "type": "company",
+          "data": {
+            "name": "Microsoft Corporation",
+            "type": "Public",
+            "industry": "Technology",
+            "founded": "April 4, 1975",
+            "founders": "Bill Gates, Paul Allen",
+            "headquarters": "Redmond, Washington, U.S.",
+            "key_people": "Satya Nadella (CEO)"
+          }
+        }
+      ],
+      "links": [
+        { "page": "Redmond, Washington", "text": "Redmond, Washington" },
+        { "page": "Windows", "text": "Windows" },
+        { "page": "Microsoft 365", "text": "Microsoft 365" }
+      ],
+      "categories": [
+        "Microsoft",
+        "Companies based in Washington (state)",
+        "Technology companies of the United States",
+        "American companies established in 1975"
+      ],
+      "isRedirect": false,
+      "isDisambiguation": false,
+      "timestamp": "2024-01-12T12:00:00Z",
+      "type": "org"
+    },
+    {
+      "title": "Inception (film)",
+      "id": 25188262,
+      "plaintext": "Inception is a 2010 science fiction action film written and directed by Christopher Nolan, who also produced the film with Emma Thomas. The film stars Leonardo DiCaprio as a professional thief who steals information by infiltrating the subconscious of his targets.",
+      "infoboxes": [
+        {
+          "type": "film",
+          "data": {
+            "name": "Inception",
+            "director": "Christopher Nolan",
+            "producer": "Christopher Nolan, Emma Thomas",
+            "writer": "Christopher Nolan",
+            "starring": "Leonardo DiCaprio, Ellen Page, Tom Hardy",
+            "music": "Hans Zimmer",
+            "released": "July 16, 2010",
+            "runtime": "148 minutes",
+            "budget": "$160 million",
+            "gross": "$836.8 million"
+          }
+        }
+      ],
+      "links": [
+        { "page": "Christopher Nolan", "text": "Christopher Nolan" },
+        { "page": "Leonardo DiCaprio", "text": "Leonardo DiCaprio" },
+        { "page": "Science fiction film", "text": "science fiction" }
+      ],
+      "categories": [
+        "2010 films",
+        "American science fiction films",
+        "Films directed by Christopher Nolan",
+        "Films about dreams"
+      ],
+      "isRedirect": false,
+      "isDisambiguation": false,
+      "timestamp": "2024-01-13T18:00:00Z",
+      "type": "work"
+    },
+    {
+      "title": "Battle of Waterloo",
+      "id": 50000,
+      "plaintext": "The Battle of Waterloo was fought on Sunday 18 June 1815, near Waterloo in the United Kingdom of the Netherlands, now in Belgium. A French army under the command of Napoleon was defeated by two of the armies of the Seventh Coalition. The defeat at Waterloo ended Napoleon's rule as Emperor of the French and marked the end of his Hundred Days return from exile.",
+      "infoboxes": [
+        {
+          "type": "military conflict",
+          "data": {
+            "conflict": "Battle of Waterloo",
+            "date": "18 June 1815",
+            "place": "Waterloo, United Kingdom of the Netherlands",
+            "result": "Coalition victory",
+            "combatant1": "French Empire",
+            "combatant2": "United Kingdom, Prussia, Netherlands"
+          }
+        }
+      ],
+      "links": [
+        { "page": "Napoleon", "text": "Napoleon" },
+        { "page": "Seventh Coalition", "text": "Seventh Coalition" },
+        { "page": "Waterloo", "text": "Waterloo" }
+      ],
+      "categories": [
+        "Battles of the Napoleonic Wars",
+        "1815 in Belgium",
+        "Conflicts in 1815",
+        "Battles of the War of the Seventh Coalition"
+      ],
+      "isRedirect": false,
+      "isDisambiguation": false,
+      "timestamp": "2024-01-10T14:00:00Z",
+      "type": "event"
+    },
+    {
+      "title": "DNA",
+      "id": 60000,
+      "plaintext": "Deoxyribonucleic acid is a polymer composed of two polynucleotide chains that coil around each other to form a double helix. The polymer carries genetic instructions for the development, functioning, growth and reproduction of all known organisms and many viruses. DNA and ribonucleic acid (RNA) are nucleic acids.",
+      "infoboxes": [],
+      "links": [
+        { "page": "Polymer", "text": "polymer" },
+        { "page": "Double helix", "text": "double helix" },
+        { "page": "Genetics", "text": "genetic" },
+        { "page": "Organism", "text": "organisms" }
+      ],
+      "categories": [
+        "DNA",
+        "Genetics",
+        "Nucleic acids",
+        "Molecular biology"
+      ],
+      "isRedirect": false,
+      "isDisambiguation": false,
+      "timestamp": "2024-01-09T10:00:00Z",
+      "type": "other"
+    }
+  ],
+  "redirects": [
+    {
+      "title": "World War II",
+      "id": 32927,
+      "redirectTarget": "Second World War"
+    }
+  ],
+  "metadata": {
+    "source": "Sample fixtures for testing",
+    "version": "1.0.0",
+    "generated": "2024-01-15T12:00:00Z"
+  }
+}

@@ -1,0 +1,11 @@
+name = "embeddings"
+main = "index.ts"
+compatibility_date = "2024-12-01"
+account_id = "b6641681fe423910342b9ffa1364c76d"
+
+[ai]
+binding = "AI"
+
+[[routes]]
+pattern = "embeddings.workers.do/*"
+zone_name = "workers.do"

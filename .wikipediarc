@@ -1,0 +1,5 @@
+{
+  "accountId": "49907571117e161f3bdbbe0b443a0a05",
+  "dataDir": "./data",
+  "_note": "For embeddings, set apiToken to a Cloudflare API token with Workers AI permissions. Create one at https://dash.cloudflare.com/profile/api-tokens"
+}

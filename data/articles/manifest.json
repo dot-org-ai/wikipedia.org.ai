@@ -1,0 +1,70 @@
+{
+  "version": "1.0.0",
+  "created_at": "2026-02-03T19:34:09.932Z",
+  "totalArticles": 10000,
+  "articlesByType": {
+    "person": 1481,
+    "place": 912,
+    "org": 182,
+    "work": 249,
+    "event": 49,
+    "other": 7127
+  },
+  "dataFiles": [
+    {
+      "path": "data/person/person.0.parquet",
+      "size": 3048489,
+      "rowCount": 1481,
+      "rowGroups": 1,
+      "type": "person",
+      "shard": 0
+    },
+    {
+      "path": "data/place/place.0.parquet",
+      "size": 2333704,
+      "rowCount": 912,
+      "rowGroups": 1,
+      "type": "place",
+      "shard": 0
+    },
+    {
+      "path": "data/org/org.0.parquet",
+      "size": 445041,
+      "rowCount": 182,
+      "rowGroups": 1,
+      "type": "org",
+      "shard": 0
+    },
+    {
+      "path": "data/work/work.0.parquet",
+      "size": 571185,
+      "rowCount": 249,
+      "rowGroups": 1,
+      "type": "work",
+      "shard": 0
+    },
+    {
+      "path": "data/event/event.0.parquet",
+      "size": 160724,
+      "rowCount": 49,
+      "rowGroups": 1,
+      "type": "event",
+      "shard": 0
+    },
+    {
+      "path": "data/other/other.0.parquet",
+      "size": 12341194,
+      "rowCount": 7127,
+      "rowGroups": 1,
+      "type": "other",
+      "shard": 0
+    }
+  ],
+  "forwardRelFiles": [],
+  "reverseRelFiles": [],
+  "indexFiles": {
+    "titles": "indexes/titles.json.gz",
+    "types": "indexes/types.json.gz",
+    "bloomFilters": []
+  }
+}

@@ -1,0 +1,74 @@
+# Wikipedia Ingestion Sandbox Worker
+#
+# Cloudflare Container deployment for long-running Wikipedia dump processing.
+# Uses R2 FUSE mount for direct filesystem access to the storage bucket.
+#
+# Deploy with: wrangler deploy -c wrangler.sandbox.toml
+# Test with: wrangler dev -c wrangler.sandbox.toml
+
+name = "wikipedia-ingest"
+main = "workers/sandbox/worker.ts"
+compatibility_date = "2024-01-01"
+
+# Container configuration
+[[containers]]
+class_name = "WikipediaIngestContainer"
+image = "./Dockerfile.sandbox"
+max_instances = 1
+
+# Custom instance type: 12GB RAM, 4 vCPU, 20GB disk
+[containers.instance_type]
+vcpu = 4
+memory_mib = 12288
+disk_mb = 20000
+
+# Durable Object binding for the Container
+[[durable_objects.bindings]]
+name = "INGEST_CONTAINER"
+class_name = "WikipediaIngestContainer"
+
+# Migration for Durable Objects
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["WikipediaIngestContainer"]
+
+# R2 bucket for data storage (accessed via S3 API in container)
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "wikipedia-data"
+
+# AI binding for embeddings (optional, used during enrichment)
+[ai]
+binding = "AI"
+
+# Environment variables passed to the Worker
+[vars]
+MODE = "ingest"
+WIKIPEDIA_DUMP_URL = "https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pages-articles.xml.bz2"
+OUTPUT_DIR = "/mnt/r2/wikipedia"
+BATCH_SIZE = "5000"
+CHECKPOINT_INTERVAL = "10000"
+HTTP_PORT = "8080"
+SKIP_REDIRECTS = "true"
+SKIP_DISAMBIGUATION = "true"
+LOG_INTERVAL = "1000"
+R2_BUCKET_NAME = "wikipedia-data"
+
+# Staging environment for testing with smaller datasets
+[env.staging]
+name = "wikipedia-ingest-staging"
+[env.staging.vars]
+MODE = "ingest"
+WIKIPEDIA_DUMP_URL = "https://dumps.wikimedia.org/simplewiki/latest/simplewiki-latest-pages-articles.xml.bz2"
+OUTPUT_DIR = "/mnt/r2/wikipedia-staging"
+BATCH_SIZE = "1000"
+LIMIT = "10000"
+
+# Production environment for full English Wikipedia
+[env.production]
+name = "wikipedia-ingest"
+[env.production.vars]
+MODE = "ingest"
+WIKIPEDIA_DUMP_URL = "https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pages-articles.xml.bz2"
+OUTPUT_DIR = "/mnt/r2/wikipedia"
+BATCH_SIZE = "5000"

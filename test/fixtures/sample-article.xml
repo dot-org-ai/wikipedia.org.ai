@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mediawiki xmlns="http://www.mediawiki.org/xml/export-0.10/">
+  <siteinfo>
+    <sitename>Wikipedia</sitename>
+    <dbname>enwiki</dbname>
+    <base>https://en.wikipedia.org/wiki/Main_Page</base>
+    <generator>MediaWiki 1.40.0</generator>
+    <case>first-letter</case>
+    <namespaces>
+      <namespace key="0" case="first-letter" />
+      <namespace key="1" case="first-letter">Talk</namespace>
+    </namespaces>
+  </siteinfo>
+  <page>
+    <title>Albert Einstein</title>
+    <ns>0</ns>
+    <id>736</id>
+    <revision>
+      <id>1234567890</id>
+      <timestamp>2024-01-15T10:30:00Z</timestamp>
+      <contributor>
+        <username>WikiEditor</username>
+        <id>12345</id>
+      </contributor>
+      <text bytes="5000">{{Infobox scientist
+| name = Albert Einstein
+| birth_date = {{birth date|1879|3|14}}
+| birth_place = [[Ulm]], [[German Empire]]
+| death_date = {{death date and age|1955|4|18|1879|3|14}}
+| death_place = [[Princeton, New Jersey]], U.S.
+| field = [[Physics]]
+| alma_mater = [[ETH Zurich]]
+| known_for = [[General relativity]], [[Special relativity]], [[Photoelectric effect]]
+}}
+
+'''Albert Einstein''' ({{IPAc-en|ˈ|aɪ|n|s|t|aɪ|n}} {{respell|EYEN|styne}}; German: [ˈalbɛʁt ˈʔaɪnʃtaɪn]; 14 March 1879 – 18 April 1955) was a German-born theoretical [[physicist]] who is widely held to be one of the greatest and most influential scientists of all time.
+
+Einstein is best known for developing the [[theory of relativity]], but he also made important contributions to the development of the theory of [[quantum mechanics]]. Relativity and quantum mechanics are the two pillars of [[modern physics]]. His mass–energy equivalence formula ''E'' = ''mc''&lt;sup&gt;2&lt;/sup&gt;, which arises from relativity theory, has been dubbed "the world's most famous equation".
+
+== Early life ==
+Einstein was born in [[Ulm]], in the [[Kingdom of Württemberg]] in the [[German Empire]], on 14 March 1879. His parents were [[Hermann Einstein]], a salesman and engineer, and Pauline Koch.
+
+== Career ==
+Einstein received the 1921 [[Nobel Prize in Physics]] "for his services to Theoretical Physics, and especially for his discovery of the law of the [[photoelectric effect]]".
+
+[[Category:1879 births]]
+[[Category:1955 deaths]]
+[[Category:German physicists]]
+[[Category:Nobel laureates in Physics]]
+[[Category:People from Ulm]]</text>
+    </revision>
+  </page>
+  <page>
+    <title>Tokyo</title>
+    <ns>0</ns>
+    <id>30057</id>
+    <revision>
+      <id>9876543210</id>
+      <timestamp>2024-01-14T08:00:00Z</timestamp>
+      <contributor>
+        <username>GeoEditor</username>
+        <id>54321</id>
+      </contributor>
+      <text bytes="4500">{{Infobox settlement
+| name = Tokyo
+| native_name = 東京
+| settlement_type = [[Metropolis]]
+| image_skyline = Tokyo_Montage_2015.jpg
+| subdivision_type = Country
+| subdivision_name = {{flagicon|JPN}} [[Japan]]
+| population_total = 13960000
+| area_total_km2 = 2194
+| coordinates = {{coord|35|41|N|139|41|E|display=inline,title}}
+}}
+
+'''Tokyo''' ({{IPAc-en|ˈ|t|oʊ|k|i|oʊ}}; Japanese: 東京, Tōkyō) is the capital and most populous [[prefecture]] of [[Japan]]. Located at the head of [[Tokyo Bay]], the prefecture forms part of the [[Kantō region]] on the central Pacific coast of Japan's main island, [[Honshu]].
+
+Tokyo is the political and economic center of the country, as well as the seat of the [[Emperor of Japan]] and the national government. The [[Greater Tokyo Area]] is the most populous metropolitan area in the world.
+
+== History ==
+The area that is now Tokyo was inhabited by several tribes. In 1603, [[Tokugawa Ieyasu]] established the [[Tokugawa shogunate]] and made Edo (later Tokyo) its capital.
+
+[[Category:Tokyo]]
+[[Category:Capitals in Asia]]
+[[Category:Cities in Japan]]
+[[Category:Populated places in Tokyo]]</text>
+    </revision>
+  </page>
+  <page>
+    <title>Talk:Albert Einstein</title>
+    <ns>1</ns>
+    <id>737</id>
+    <revision>
+      <id>1111111111</id>
+      <timestamp>2024-01-10T15:00:00Z</timestamp>
+      <contributor>
+        <username>TalkUser</username>
+        <id>11111</id>
+      </contributor>
+      <text bytes="200">This is a talk page discussion about the Albert Einstein article.</text>
+    </revision>
+  </page>
+  <page>
+    <title>Microsoft</title>
+    <ns>0</ns>
+    <id>19001</id>
+    <revision>
+      <id>2222222222</id>
+      <timestamp>2024-01-12T12:00:00Z</timestamp>
+      <contributor>
+        <username>BizEditor</username>
+        <id>22222</id>
+      </contributor>
+      <text bytes="3500">{{Infobox company
+| name = Microsoft Corporation
+| logo = Microsoft_logo.svg
+| type = [[Public company|Public]]
+| traded_as = {{nasdaq|MSFT}}
+| industry = [[Technology]]
+| founded = {{start date and age|1975|04|04}}
+| founders = [[Bill Gates]], [[Paul Allen]]
+| headquarters = [[Redmond, Washington]], U.S.
+| key_people = [[Satya Nadella]] (CEO)
+| products = [[Windows]], [[Microsoft 365]], [[Azure]]
+}}
+
+'''Microsoft Corporation''' is an American multinational [[technology company|technology corporation]] headquartered in [[Redmond, Washington]]. Microsoft's best-known software products are the [[Windows]] line of [[operating systems]], the [[Microsoft 365]] suite of productivity applications, and the [[Internet Explorer]] and [[Microsoft Edge|Edge]] [[web browser]]s.
+
+== History ==
+Microsoft was founded by [[Bill Gates]] and [[Paul Allen]] on April 4, 1975, to develop and sell [[BASIC]] interpreters for the [[Altair 8800]].
+
+[[Category:Microsoft]]
+[[Category:Companies based in Washington (state)]]
+[[Category:Technology companies of the United States]]
+[[Category:American companies established in 1975]]</text>
+    </revision>
+  </page>
+  <page>
+    <title>World War II</title>
+    <ns>0</ns>
+    <id>32927</id>
+    <redirect title="Second World War" />
+    <revision>
+      <id>3333333333</id>
+      <timestamp>2024-01-11T09:00:00Z</timestamp>
+      <contributor>
+        <username>RedirectUser</username>
+        <id>33333</id>
+      </contributor>
+      <text bytes="50">#REDIRECT [[Second World War]]</text>
+    </revision>
+  </page>
+  <page>
+    <title>Inception (film)</title>
+    <ns>0</ns>
+    <id>25188262</id>
+    <revision>
+      <id>4444444444</id>
+      <timestamp>2024-01-13T18:00:00Z</timestamp>
+      <contributor>
+        <username>FilmEditor</username>
+        <id>44444</id>
+      </contributor>
+      <text bytes="4000">{{Infobox film
+| name = Inception
+| image = Inception_poster.jpg
+| director = [[Christopher Nolan]]
+| producer = [[Christopher Nolan]], [[Emma Thomas]]
+| writer = Christopher Nolan
+| starring = [[Leonardo DiCaprio]], [[Ellen Page]], [[Tom Hardy]]
+| music = [[Hans Zimmer]]
+| released = {{film date|2010|07|16}}
+| runtime = 148 minutes
+| country = United States, United Kingdom
+| language = English
+| budget = $160 million
+| gross = $836.8 million
+}}
+
+'''''Inception''''' is a 2010 [[science fiction film|science fiction]] [[action film]] written and directed by [[Christopher Nolan]], who also produced the film with [[Emma Thomas]]. The film stars [[Leonardo DiCaprio]] as a professional thief who steals information by infiltrating the subconscious of his targets.
+
+== Plot ==
+Dom Cobb is a skilled thief, the absolute best in the dangerous art of extraction, stealing valuable secrets from deep within the subconscious during the dream state.
+
+[[Category:2010 films]]
+[[Category:American science fiction films]]
+[[Category:Films directed by Christopher Nolan]]
+[[Category:Films about dreams]]</text>
+    </revision>
+  </page>
+</mediawiki>

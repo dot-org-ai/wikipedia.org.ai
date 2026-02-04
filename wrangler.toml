@@ -1,0 +1,57 @@
+name = "wikipedia-org-ai"
+main = "dist/workers/api/index.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Use Standard (formerly Unbound) for no CPU time limits on large article parsing
+usage_model = "standard"
+
+# Tail worker for CPU/event monitoring
+# The tail worker receives execution traces and monitors for CPU/memory issues
+[[tail_consumers]]
+service = "wikipedia-tail"
+
+# R2 bucket for data storage
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "wikipedia-data"
+
+# KV namespace for rate limiting (optional - for distributed rate limiting)
+# Uncomment to enable KV-based rate limiting across multiple worker instances
+# [[kv_namespaces]]
+# binding = "RATE_LIMIT_KV"
+# id = "your-kv-namespace-id"
+
+# AI binding for Workers AI
+[ai]
+binding = "AI"
+
+# Environment variables
+[vars]
+AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/{account_id}/wikipedia"
+
+# Staging environment
+[env.staging]
+name = "wikipedia-org-ai-staging"
+vars = { ENVIRONMENT = "staging" }
+
+# Production environment
+[env.production]
+name = "wikipedia-org-ai"
+routes = [
+  { pattern = "wikipedia.org.ai/*", zone_name = "workers.do" }
+]
+
+[env.production.vars]
+ENVIRONMENT = "production"
+AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/{account_id}/wikipedia"
+
+[[env.production.r2_buckets]]
+binding = "R2"
+bucket_name = "wikipedia-data"
+
+[env.production.ai]
+binding = "AI"
+
+[[env.production.tail_consumers]]
+service = "wikipedia-tail"

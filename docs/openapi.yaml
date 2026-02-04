@@ -1,0 +1,1229 @@
+openapi: 3.1.0
+info:
+  title: Wikipedia API
+  version: 1.0.0
+  description: |
+    REST API for Wikipedia data served from R2 storage.
+
+    This API provides access to Wikipedia articles with support for:
+    - Article retrieval by ID or title
+    - Full-text and vector similarity search
+    - Geographic proximity queries
+    - Article relationship graph traversal
+    - Article type filtering and statistics
+
+    ## Authentication
+
+    All API endpoints (except `/health` and `/`) require authentication via API key.
+
+    API keys can be provided in two ways:
+    - **Header**: `X-API-Key: your-api-key`
+    - **Query Parameter**: `?api_key=your-api-key`
+
+    ## Rate Limiting
+
+    Authenticated requests are rate limited to 1000 requests per minute per API key.
+    Rate limit information is returned in response headers:
+    - `X-RateLimit-Remaining`: Number of requests remaining in current window
+    - `X-RateLimit-Reset`: Unix timestamp when the rate limit resets
+
+    ## Response Headers
+
+    All responses include:
+    - `X-Response-Time`: Request processing time in milliseconds
+    - `X-Cache`: Cache status (`HIT` or `MISS`)
+    - CORS headers for cross-origin requests
+  contact:
+    name: API Support
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://wikipedia.example.com
+    description: Production server
+  - url: http://localhost:8787
+    description: Local development server
+
+security:
+  - ApiKeyHeader: []
+  - ApiKeyQuery: []
+
+tags:
+  - name: Health
+    description: Health check and API information
+  - name: Articles
+    description: Article retrieval and listing
+  - name: Search
+    description: Full-text and vector similarity search
+  - name: Relationships
+    description: Article relationship graph traversal
+  - name: Types
+    description: Article type statistics
+  - name: Geo
+    description: Geographic queries
+
+paths:
+  /:
+    get:
+      operationId: getApiInfo
+      summary: Get API information
+      description: Returns API metadata and available endpoints
+      tags:
+        - Health
+      security: []
+      responses:
+        '200':
+          description: API information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiInfo'
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      description: Returns the health status of the API
+      tags:
+        - Health
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/articles/{id}:
+    get:
+      operationId: getArticleById
+      summary: Get article by ID
+      description: Retrieve a single article by its unique identifier
+      tags:
+        - Articles
+      parameters:
+        - $ref: '#/components/parameters/ArticleId'
+      responses:
+        '200':
+          description: Article found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Article'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/articles:
+    get:
+      operationId: listArticles
+      summary: List articles
+      description: |
+        Retrieve a paginated list of articles with optional type filtering.
+        Supports both offset-based and cursor-based pagination.
+      tags:
+        - Articles
+      parameters:
+        - $ref: '#/components/parameters/ArticleType'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: List of articles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedArticles'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/wiki/{title}:
+    get:
+      operationId: getArticleByTitle
+      summary: Get article by title
+      description: |
+        Retrieve a single article by its Wikipedia title.
+        The title should be URL-encoded (e.g., spaces as %20 or +).
+      tags:
+        - Articles
+      parameters:
+        - name: title
+          in: path
+          required: true
+          description: Wikipedia article title (URL-encoded)
+          schema:
+            type: string
+          example: Albert_Einstein
+      responses:
+        '200':
+          description: Article found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Article'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/articles/near:
+    get:
+      operationId: searchNearby
+      summary: Search articles near a location
+      description: |
+        Find articles within a specified radius of a geographic location.
+        Results are sorted by distance from the center point.
+      tags:
+        - Articles
+        - Geo
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          description: Latitude of the center point (-90 to 90)
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+          example: 48.8566
+        - name: lng
+          in: query
+          required: true
+          description: Longitude of the center point (-180 to 180)
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+          example: 2.3522
+        - name: radius
+          in: query
+          description: Search radius in kilometers (default 10, max 500)
+          schema:
+            type: number
+            format: double
+            default: 10
+            minimum: 0
+            maximum: 500
+          example: 5
+        - name: limit
+          in: query
+          description: Maximum number of results (default 50, max 100)
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+          example: 20
+        - name: types
+          in: query
+          description: Comma-separated list of article types to filter
+          schema:
+            type: string
+          example: place,org
+        - name: fast
+          in: query
+          description: If true, return only basic info without full article data
+          schema:
+            type: string
+            enum: ['true', 'false']
+            default: 'false'
+      responses:
+        '200':
+          description: Nearby articles found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NearbySearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/search:
+    get:
+      operationId: vectorSearch
+      summary: Vector similarity search
+      description: |
+        Search articles using vector similarity (semantic search).
+        Uses HNSW index for O(log n) approximate nearest neighbor search.
+        Falls back to brute-force search if HNSW index is unavailable.
+      tags:
+        - Search
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query text
+          schema:
+            type: string
+            minLength: 1
+          example: quantum physics discoveries
+        - name: k
+          in: query
+          description: Number of results to return (default 10, max 100)
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+          example: 20
+        - name: types
+          in: query
+          description: Comma-separated list of article types to filter
+          schema:
+            type: string
+          example: person,work
+        - name: model
+          in: query
+          description: Embedding model to use
+          schema:
+            type: string
+            default: bge-m3
+          example: bge-m3
+        - name: hnsw
+          in: query
+          description: Whether to use HNSW index (default true)
+          schema:
+            type: string
+            enum: ['true', 'false']
+            default: 'true'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorSearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/search/text:
+    get:
+      operationId: textSearch
+      summary: Full-text search
+      description: |
+        Search articles using full-text search with BM25 scoring.
+        Searches across title, description, and content fields with weighted relevance.
+      tags:
+        - Search
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query text
+          schema:
+            type: string
+            minLength: 1
+          example: Marie Curie
+        - name: types
+          in: query
+          description: Comma-separated list of article types to filter
+          schema:
+            type: string
+          example: person
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TextSearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/relationships/{id}:
+    get:
+      operationId: getRelationships
+      summary: Get article relationships
+      description: |
+        Get all relationships (both incoming and outgoing) for an article.
+        Relationships include links, semantic connections (born_in, member_of, etc.).
+      tags:
+        - Relationships
+      parameters:
+        - $ref: '#/components/parameters/ArticleId'
+        - name: direction
+          in: query
+          description: Filter by relationship direction
+          schema:
+            type: string
+            enum: [outgoing, incoming, both]
+            default: both
+        - name: predicate
+          in: query
+          description: Filter by relationship predicate
+          schema:
+            type: string
+          example: born_in
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Article relationships
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelationshipsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/relationships/{id}/outgoing:
+    get:
+      operationId: getOutgoingRelationships
+      summary: Get outgoing relationships
+      description: Get relationships where this article links to other articles
+      tags:
+        - Relationships
+      parameters:
+        - $ref: '#/components/parameters/ArticleId'
+        - name: predicate
+          in: query
+          description: Filter by relationship predicate
+          schema:
+            type: string
+          example: links_to
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Outgoing relationships
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectionalRelationshipsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/relationships/{id}/incoming:
+    get:
+      operationId: getIncomingRelationships
+      summary: Get incoming relationships
+      description: Get relationships where other articles link to this article
+      tags:
+        - Relationships
+      parameters:
+        - $ref: '#/components/parameters/ArticleId'
+        - name: predicate
+          in: query
+          description: Filter by relationship predicate
+          schema:
+            type: string
+          example: linked_from
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Incoming relationships
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectionalRelationshipsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/types:
+    get:
+      operationId: listTypes
+      summary: List article types
+      description: Get statistics for all article types
+      tags:
+        - Types
+      responses:
+        '200':
+          description: Type statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TypesListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/types/{type}:
+    get:
+      operationId: getTypeStats
+      summary: Get type statistics
+      description: Get detailed statistics for a specific article type
+      tags:
+        - Types
+      parameters:
+        - name: type
+          in: path
+          required: true
+          description: Article type
+          schema:
+            $ref: '#/components/schemas/ArticleType'
+      responses:
+        '200':
+          description: Type statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TypeStats'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/geo/stats:
+    get:
+      operationId: getGeoStats
+      summary: Get geo index statistics
+      description: Returns statistics about the geographic index
+      tags:
+        - Geo
+      responses:
+        '200':
+          description: Geo index statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeoStatsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/query:
+    post:
+      operationId: advancedQuery
+      summary: Advanced article query
+      description: |
+        Execute an advanced query with filters, sorting, and pagination.
+        Supports complex filter expressions for precise article retrieval.
+      tags:
+        - Articles
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRequest'
+            examples:
+              basicFilter:
+                summary: Basic type filter
+                value:
+                  type: person
+                  limit: 10
+              complexFilter:
+                summary: Complex filter with multiple conditions
+                value:
+                  filters:
+                    - field: type
+                      operator: eq
+                      value: person
+                    - field: title
+                      operator: starts_with
+                      value: Albert
+                  order_by: title
+                  order_dir: asc
+                  limit: 20
+      responses:
+        '200':
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedArticles'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    ApiKeyHeader:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key passed in request header
+    ApiKeyQuery:
+      type: apiKey
+      in: query
+      name: api_key
+      description: API key passed as query parameter
+
+  parameters:
+    ArticleId:
+      name: id
+      in: path
+      required: true
+      description: Unique article identifier
+      schema:
+        type: string
+      example: Q937
+
+    ArticleType:
+      name: type
+      in: query
+      description: Filter by article type
+      schema:
+        $ref: '#/components/schemas/ArticleType'
+
+    Limit:
+      name: limit
+      in: query
+      description: Maximum number of results (default 20, max 100)
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+
+    Offset:
+      name: offset
+      in: query
+      description: Number of results to skip
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+
+    Cursor:
+      name: cursor
+      in: query
+      description: Pagination cursor from previous response
+      schema:
+        type: string
+
+  schemas:
+    ArticleType:
+      type: string
+      enum:
+        - person
+        - place
+        - org
+        - work
+        - event
+        - other
+      description: Classification of article subject
+
+    Coordinates:
+      type: object
+      properties:
+        lat:
+          type: number
+          format: double
+          description: Latitude
+        lon:
+          type: number
+          format: double
+          description: Longitude
+      required:
+        - lat
+        - lon
+
+    Article:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique article identifier (Wikidata Q-ID)
+          example: Q937
+        type:
+          $ref: '#/components/schemas/ArticleType'
+        title:
+          type: string
+          description: Article title
+          example: Albert Einstein
+        description:
+          type: string
+          description: Brief description of the article subject
+          example: German-born theoretical physicist (1879-1955)
+        wikidata_id:
+          type: string
+          nullable: true
+          description: Wikidata entity ID
+          example: Q937
+        coords:
+          allOf:
+            - $ref: '#/components/schemas/Coordinates'
+          nullable: true
+          description: Geographic coordinates (for places)
+        infobox:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Structured infobox data
+        content:
+          type: string
+          description: Full article content
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+      required:
+        - id
+        - type
+        - title
+        - description
+        - content
+        - updated_at
+
+    Relationship:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Source article ID
+        predicate:
+          type: string
+          description: Relationship type
+          example: links_to
+        target_id:
+          type: string
+          description: Target article ID
+        target_title:
+          type: string
+          description: Target article title
+        direction:
+          type: string
+          enum: [outgoing, incoming]
+          description: Relationship direction
+      required:
+        - id
+        - predicate
+        - target_id
+        - target_title
+        - direction
+
+    SearchResult:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Article ID
+        title:
+          type: string
+          description: Article title
+        type:
+          $ref: '#/components/schemas/ArticleType'
+        score:
+          type: number
+          format: double
+          description: Relevance score
+        preview:
+          type: string
+          description: Text preview/snippet
+      required:
+        - id
+        - title
+        - type
+        - score
+
+    TypeStats:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/ArticleType'
+        count:
+          type: integer
+          description: Number of articles of this type
+        files:
+          type: integer
+          description: Number of data files containing this type
+      required:
+        - type
+        - count
+        - files
+
+    Pagination:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Total number of results
+        limit:
+          type: integer
+          description: Maximum results per page
+        offset:
+          type: integer
+          description: Current offset
+        has_more:
+          type: boolean
+          description: Whether more results are available
+        cursor:
+          type: string
+          description: Cursor for next page (if available)
+      required:
+        - total
+        - limit
+        - offset
+        - has_more
+
+    QueryFilter:
+      type: object
+      properties:
+        field:
+          type: string
+          description: Field to filter on
+          example: title
+        operator:
+          type: string
+          enum:
+            - eq
+            - ne
+            - gt
+            - gte
+            - lt
+            - lte
+            - in
+            - contains
+            - starts_with
+          description: Filter operator
+        value:
+          description: Filter value (type depends on operator)
+      required:
+        - field
+        - operator
+        - value
+
+    QueryRequest:
+      type: object
+      properties:
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryFilter'
+          description: Array of filter conditions (all must match)
+        type:
+          $ref: '#/components/schemas/ArticleType'
+        limit:
+          type: integer
+          default: 20
+          minimum: 1
+          maximum: 100
+        offset:
+          type: integer
+          default: 0
+          minimum: 0
+        order_by:
+          type: string
+          description: Field to sort by
+          example: title
+        order_dir:
+          type: string
+          enum: [asc, desc]
+          default: asc
+          description: Sort direction
+
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error code
+          example: NOT_FOUND
+        message:
+          type: string
+          description: Human-readable error message
+          example: Article not found
+        status:
+          type: integer
+          description: HTTP status code
+          example: 404
+        details:
+          description: Additional error details (optional)
+      required:
+        - error
+        - message
+        - status
+
+    ApiInfo:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Wikipedia API
+        version:
+          type: string
+          example: 1.0.0
+        description:
+          type: string
+        endpoints:
+          type: object
+          additionalProperties: true
+          description: Available API endpoints
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+      required:
+        - status
+        - timestamp
+        - version
+
+    PaginatedArticles:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Article'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+        - data
+        - pagination
+
+    VectorSearchResponse:
+      type: object
+      properties:
+        query:
+          type: string
+          description: Original search query
+        k:
+          type: integer
+          description: Requested number of results
+        model:
+          type: string
+          description: Embedding model used
+        useHnsw:
+          type: boolean
+          description: Whether HNSW index was used
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchResult'
+        count:
+          type: integer
+          description: Number of results returned
+        searchTimeMs:
+          type: integer
+          description: Search execution time in milliseconds
+      required:
+        - query
+        - k
+        - model
+        - results
+        - count
+        - searchTimeMs
+
+    TextSearchResponse:
+      type: object
+      properties:
+        query:
+          type: string
+          description: Original search query
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchResult'
+        count:
+          type: integer
+          description: Number of results returned
+      required:
+        - query
+        - results
+        - count
+
+    RelationshipsResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Article ID
+        direction:
+          type: string
+          enum: [outgoing, incoming, both]
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Relationship'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        outgoing_count:
+          type: integer
+          description: Total outgoing relationships
+        incoming_count:
+          type: integer
+          description: Total incoming relationships
+      required:
+        - id
+        - direction
+        - data
+        - pagination
+        - outgoing_count
+        - incoming_count
+
+    DirectionalRelationshipsResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Article ID
+        direction:
+          type: string
+          enum: [outgoing, incoming]
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Relationship'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+        - id
+        - direction
+        - data
+        - pagination
+
+    TypesListResponse:
+      type: object
+      properties:
+        types:
+          type: array
+          items:
+            $ref: '#/components/schemas/TypeStats'
+        summary:
+          type: object
+          properties:
+            total_articles:
+              type: integer
+            total_files:
+              type: integer
+            type_count:
+              type: integer
+          required:
+            - total_articles
+            - total_files
+            - type_count
+      required:
+        - types
+        - summary
+
+    GeoStatsResponse:
+      type: object
+      properties:
+        indexed_articles:
+          type: integer
+          description: Number of articles with geographic data
+        geohash_buckets:
+          type: integer
+          description: Number of geohash buckets in index
+        status:
+          type: string
+          enum: [ready, building]
+          description: Index status
+      required:
+        - indexed_articles
+        - geohash_buckets
+        - status
+
+    NearbySearchResponse:
+      type: object
+      properties:
+        query:
+          type: object
+          properties:
+            lat:
+              type: number
+            lng:
+              type: number
+            radius:
+              type: number
+            limit:
+              type: integer
+            types:
+              oneOf:
+                - type: string
+                - type: array
+                  items:
+                    $ref: '#/components/schemas/ArticleType'
+        data:
+          type: array
+          description: Articles with distance (when fast=false)
+          items:
+            allOf:
+              - $ref: '#/components/schemas/Article'
+              - type: object
+                properties:
+                  distance:
+                    type: number
+                    description: Distance in meters
+                  distanceKm:
+                    type: number
+                    description: Distance in kilometers
+        results:
+          type: array
+          description: Basic info with distance (when fast=true)
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              title:
+                type: string
+              type:
+                $ref: '#/components/schemas/ArticleType'
+              distance:
+                type: number
+              distanceKm:
+                type: number
+              coords:
+                type: object
+                properties:
+                  lat:
+                    type: number
+                  lng:
+                    type: number
+        count:
+          type: integer
+          description: Number of results
+      required:
+        - query
+        - count
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            error: BAD_REQUEST
+            message: Missing required parameter
+            status: 400
+
+    Unauthorized:
+      description: Unauthorized - missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            error: UNAUTHORIZED
+            message: API key is required. Provide via X-API-Key header or api_key query parameter.
+            status: 401
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            error: NOT_FOUND
+            message: Article not found
+            status: 404
+
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+          description: Remaining requests in current window
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+          description: Unix timestamp when rate limit resets
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until rate limit resets
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            error: RATE_LIMITED
+            message: Rate limit exceeded. Please try again later.
+            status: 429
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            error: INTERNAL_ERROR
+            message: An internal error occurred
+            status: 500

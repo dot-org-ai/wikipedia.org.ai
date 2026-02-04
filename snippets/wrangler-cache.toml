@@ -1,0 +1,36 @@
+# Wiki Cache Entry Snippet Configuration
+# Lightweight cache/analytics layer for wiki.org.ai
+#
+# DEPRECATED: This snippet has been disabled. wiki.org.ai traffic now goes
+# directly to the main worker at src/workers/api/ which has 50ms+ CPU limit.
+# The snippet's 5ms CPU limit caused Error 1102 on large articles like Tokyo.
+# See: wikipedia-es7
+#
+# This snippet previously handled:
+# - Cache API for response caching
+# - Error logging when inner worker crashes
+# - Basic analytics (latency, cache hit/miss)
+#
+# IMPORTANT: Routes commented out - main worker now handles wiki.org.ai
+
+name = "wiki-cache-entry"
+main = "wiki-cache-entry.ts"
+compatibility_date = "2024-12-01"
+account_id = "b6641681fe423910342b9ffa1364c76d"
+
+# Routes - DISABLED: Now handled by main worker (see wrangler.toml)
+# Snippet had 5ms CPU limit causing Error 1102 on large articles
+# routes = [
+#   { pattern = "wiki.org.ai/*", zone_name = "workers.do" }
+# ]
+
+# No bindings needed - uses only Cache API (built-in)
+# No KV, R2, or Durable Objects to keep it lightweight
+
+[build]
+command = "echo 'No build needed'"
+
+# Observability
+# - Errors logged via console.error appear in Cloudflare logs
+# - X-Cache header shows HIT/MISS/ERROR
+# - X-Latency-Ms header shows request latency

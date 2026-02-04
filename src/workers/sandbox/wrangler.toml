@@ -1,0 +1,102 @@
+# Wikipedia Sandbox Worker Configuration
+# Handles Wikipedia data ingestion and processing
+
+name = "wikipedia-sandbox"
+main = "index.ts"
+compatibility_date = "2024-12-01"
+
+# CPU and memory limits for heavy processing
+# Note: These are suggestions - actual limits depend on Cloudflare plan
+[limits]
+cpu_ms = 30000  # 30 seconds CPU time per request
+
+# R2 bucket for input (Wikipedia dumps)
+[[r2_buckets]]
+binding = "INPUT_BUCKET"
+bucket_name = "wikipedia-dumps"
+
+# R2 bucket for processed output (Parquet files)
+[[r2_buckets]]
+binding = "OUTPUT_BUCKET"
+bucket_name = "wikipedia-data"
+
+# Queue for job processing
+[[queues.producers]]
+binding = "INGEST_QUEUE"
+queue = "wikipedia-ingest-jobs"
+
+# Queue consumer configuration
+[[queues.consumers]]
+queue = "wikipedia-ingest-jobs"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "wikipedia-ingest-dlq"
+
+# Workers AI binding for embeddings
+[ai]
+binding = "AI"
+
+# Environment variables
+[vars]
+ENVIRONMENT = "development"
+
+# Staging environment
+[env.staging]
+name = "wikipedia-sandbox-staging"
+vars = { ENVIRONMENT = "staging" }
+
+[[env.staging.r2_buckets]]
+binding = "INPUT_BUCKET"
+bucket_name = "wikipedia-dumps-staging"
+
+[[env.staging.r2_buckets]]
+binding = "OUTPUT_BUCKET"
+bucket_name = "wikipedia-data-staging"
+
+[[env.staging.queues.producers]]
+binding = "INGEST_QUEUE"
+queue = "wikipedia-ingest-jobs-staging"
+
+[[env.staging.queues.consumers]]
+queue = "wikipedia-ingest-jobs-staging"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+# Production environment
+[env.production]
+name = "wikipedia-sandbox"
+vars = { ENVIRONMENT = "production" }
+
+[[env.production.r2_buckets]]
+binding = "INPUT_BUCKET"
+bucket_name = "wikipedia-dumps"
+
+[[env.production.r2_buckets]]
+binding = "OUTPUT_BUCKET"
+bucket_name = "wikipedia-data"
+
+[[env.production.queues.producers]]
+binding = "INGEST_QUEUE"
+queue = "wikipedia-ingest-jobs"
+
+[[env.production.queues.consumers]]
+queue = "wikipedia-ingest-jobs"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "wikipedia-ingest-dlq"
+
+# Routes for production (uncomment when ready)
+# [[env.production.routes]]
+# pattern = "sandbox.wikipedia.org.ai/*"
+# zone_name = "wikipedia.org.ai"
+
+# Observability (optional)
+# [observability]
+# enabled = true
+
+# Build configuration
+[build]
+command = "npx tsc --build tsconfig.json"

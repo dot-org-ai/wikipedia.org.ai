@@ -1,0 +1,106 @@
+{
+  "name": "wikipedia.org.ai",
+  "version": "0.1.0",
+  "description": "Stream Wikipedia dumps to Parquet with AI embeddings - runs on Cloudflare Workers or locally with Bun",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "wikipedia": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./embeddings": {
+      "import": "./dist/embeddings/index.js",
+      "types": "./dist/embeddings/index.d.ts"
+    },
+    "./ingest": {
+      "import": "./dist/ingest/index.js",
+      "types": "./dist/ingest/index.d.ts"
+    },
+    "./storage": {
+      "import": "./dist/storage/index.js",
+      "types": "./dist/storage/index.d.ts"
+    },
+    "./query": {
+      "import": "./dist/query/index.js",
+      "types": "./dist/query/index.d.ts"
+    },
+    "./query/browser": {
+      "import": "./dist/query/browser.js",
+      "types": "./dist/query/browser.d.ts"
+    },
+    "./indexes": {
+      "import": "./dist/indexes/index.js",
+      "types": "./dist/indexes/index.d.ts"
+    },
+    "./wtf-lite": {
+      "import": "./dist/lib/wtf-lite/index.js",
+      "types": "./dist/lib/wtf-lite/index.d.ts"
+    }
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "tsc",
+    "test": "vitest",
+    "test:e2e": "vitest run test/e2e/",
+    "test:e2e:skip": "SKIP_E2E=true vitest run test/e2e/",
+    "test:coverage": "vitest run --coverage",
+    "lint": "biome check src/",
+    "format": "biome format --write src/",
+    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "cli": "bun run src/cli.ts",
+    "ingest": "bun run scripts/run-local-ingest.ts",
+    "ingest:full": "bun run scripts/run-local-ingest.ts",
+    "ingest:simple": "bun run scripts/run-local-ingest.ts --simple",
+    "ingest:test": "bun run scripts/run-local-ingest.ts --simple --limit 100",
+    "ingest:test:no-embed": "bun run scripts/run-local-ingest.ts --simple --limit 100 --no-embeddings"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.982.0",
+    "@cloudflare/ai": "^1.0.0",
+    "@cloudflare/containers": "^0.1.0",
+    "@dotdo/hyparquet": "^1.17.1",
+    "@dotdo/hyparquet-writer": "file:../hyparquet-writer",
+    "commander": "^12.0.0",
+    "dotenv": "^17.2.3",
+    "parquedb": "file:../parquedb",
+    "saxophone": "^0.8.0",
+    "unbzip2-stream": "^1.4.3",
+    "wtf_wikipedia": "^10.3.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240620.0",
+    "@types/bun": "^1.0.0",
+    "@vitest/coverage-v8": "^1.6.1",
+    "biome": "^0.3.0",
+    "miniflare": "^3.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.0.0",
+    "wrangler": "^4.62.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dotdo/wikipedia.org.ai"
+  },
+  "keywords": [
+    "wikipedia",
+    "parquet",
+    "embeddings",
+    "cloudflare",
+    "workers",
+    "ai",
+    "vector-search"
+  ],
+  "license": "MIT",
+  "author": "DotDo"
+}
