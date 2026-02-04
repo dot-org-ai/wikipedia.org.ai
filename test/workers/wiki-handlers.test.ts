@@ -8,7 +8,7 @@
  * - Format-specific responses
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 
 /**
  * Replicate the parsePath function for testing
