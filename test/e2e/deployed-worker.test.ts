@@ -583,13 +583,18 @@ describe('Worker CPU Time (from Tail Events)', () => {
   beforeAll(async () => {
     // Check if tail events endpoint is accessible
     try {
-      const response = await fetch(tailEventsUrl, { signal: AbortSignal.timeout(5000) });
+      const response = await fetch(tailEventsUrl, {
+        signal: AbortSignal.timeout(10000),
+        headers: { 'Accept': 'application/json' },
+      });
       tailAccessible = response.ok;
       if (!tailAccessible) {
-        console.log(`Tail events not accessible at ${tailEventsUrl}`);
+        console.log(`Tail events not accessible at ${tailEventsUrl}: HTTP ${response.status}`);
+      } else {
+        console.log(`Tail events accessible at ${tailEventsUrl}`);
       }
     } catch (error) {
-      console.log(`Tail events not accessible at ${tailEventsUrl}: ${error}`);
+      console.log(`Tail events error at ${tailEventsUrl}: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 
