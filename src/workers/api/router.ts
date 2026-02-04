@@ -438,6 +438,63 @@ export function createWikiRouter(): Router {
     });
   });
 
+  // Tail events endpoint for E2E CPU time validation
+  // Queries tail worker logs from R2 bucket
+  router.get('/_tail/events', async (ctx) => {
+    const bucket = ctx.env.R2;
+    if (!bucket) {
+      return jsonResponse({ error: 'R2 bucket not configured' }, 500);
+    }
+
+    const limit = parseInt(ctx.query.get('limit') || '10', 10);
+    const urlFilter = ctx.query.get('url');
+
+    try {
+      // List recent tail log files
+      const listed = await bucket.list({
+        prefix: 'tail/',
+        limit: Math.min(limit, 50),
+      });
+
+      const allEvents: unknown[] = [];
+
+      // Sort by key (timestamp) descending
+      const sortedObjects = listed.objects.sort((a, b) => b.key.localeCompare(a.key));
+
+      for (const obj of sortedObjects.slice(0, limit)) {
+        const object = await bucket.get(obj.key);
+        if (object) {
+          const text = await object.text();
+          try {
+            const events = JSON.parse(text);
+            if (Array.isArray(events)) {
+              allEvents.push(...events);
+            }
+          } catch {
+            // Skip malformed JSON
+          }
+        }
+      }
+
+      // Filter by URL if specified
+      let filteredEvents = allEvents;
+      if (urlFilter) {
+        filteredEvents = allEvents.filter((e: unknown) => {
+          if (typeof e === 'object' && e !== null) {
+            const event = e as Record<string, unknown>;
+            const reqUrl = (event['event'] as Record<string, unknown>)?.['request'] as Record<string, unknown> | undefined;
+            return reqUrl?.['url']?.toString().includes(urlFilter);
+          }
+          return false;
+        });
+      }
+
+      return jsonResponse(filteredEvents);
+    } catch (error) {
+      return jsonResponse({ error: String(error) }, 500);
+    }
+  });
+
   // Root: Show usage info
   router.get('/', handleWikiRoot);
 

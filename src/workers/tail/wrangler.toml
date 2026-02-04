@@ -9,10 +9,10 @@ name = "wikipedia-tail"
 main = "index.ts"
 compatibility_date = "2024-01-01"
 
-# R2 bucket for storing processed logs
+# R2 bucket for storing tail events (same as main worker for easy access)
 [[r2_buckets]]
 binding = "LOGS_BUCKET"
-bucket_name = "wikipedia-logs"
+bucket_name = "wikipedia-data"
 
 # Analytics Engine for metrics
 [[analytics_engine_datasets]]
@@ -44,9 +44,14 @@ dataset = "wikipedia_metrics_staging"
 name = "wikipedia-tail"
 vars = { ENVIRONMENT = "production" }
 
+# Route for querying tail events (E2E tests)
+[[env.production.routes]]
+pattern = "tail.wikipedia.org.ai/*"
+zone_name = "workers.do"
+
 [[env.production.r2_buckets]]
 binding = "LOGS_BUCKET"
-bucket_name = "wikipedia-logs"
+bucket_name = "wikipedia-data"
 
 [[env.production.analytics_engine_datasets]]
 binding = "ANALYTICS"

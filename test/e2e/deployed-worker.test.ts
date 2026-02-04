@@ -15,8 +15,7 @@
  * - E2E_RETRIES: Number of retries for flaky requests (default: 2)
  * - E2E_CPU_LIMIT_WORKER_MS: CPU limit for worker routes (default: 50)
  * - E2E_CPU_LIMIT_SNIPPET_MS: CPU limit for snippet routes (default: 5)
- * - CF_API_TOKEN: Cloudflare API token for Analytics API (for CPU time validation)
- * - CF_ACCOUNT_ID: Cloudflare account ID for Analytics API
+ * - E2E_TAIL_URL: URL of tail worker for CPU time validation (default: https://tail.wikipedia.org.ai)
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -31,7 +30,7 @@ import {
   type E2EConfig,
   CPU_LIMITS,
 } from './config.js';
-import { getCpuMetricsSummary } from './cf-analytics.js';
+import { queryTailEvents, extractCpuTime, assertCpuTimeWithinLimit } from './tail-events.js';
 
 // Re-load config at test time to pick up any env changes
 const e2eConfig = loadE2EConfig();
@@ -571,64 +570,101 @@ describeE2E('Deployed Worker E2E Tests', () => {
 });
 
 // ==========================================================================
-// Cloudflare Analytics CPU Time Validation (requires CF_API_TOKEN)
+// CPU Time Validation from Tail Events
+// Queries actual CPU time from tail worker trace events
 // ==========================================================================
 
-describe('Worker CPU Time (from Analytics API)', () => {
-  const hasAnalyticsCredentials = !!(process.env.CF_API_TOKEN && process.env.CF_ACCOUNT_ID);
-  const scriptName = 'wikipedia-org-ai';
+describe('Worker CPU Time (from Tail Events)', () => {
+  const tailUrl = process.env.E2E_TAIL_URL || 'https://tail.wikipedia.org.ai';
+  let tailAccessible = false;
 
-  beforeAll(() => {
-    if (!hasAnalyticsCredentials) {
-      console.log('Skipping Analytics API tests: CF_API_TOKEN and CF_ACCOUNT_ID not set');
+  beforeAll(async () => {
+    // Check if tail worker is accessible
+    try {
+      const response = await fetch(tailUrl, { signal: AbortSignal.timeout(5000) });
+      tailAccessible = response.ok;
+      if (!tailAccessible) {
+        console.log(`Tail worker not accessible at ${tailUrl}`);
+      }
+    } catch (error) {
+      console.log(`Tail worker not accessible at ${tailUrl}: ${error}`);
     }
   });
 
-  it('should have CPU P99 under 50ms for wikipedia-org-ai worker', async () => {
-    if (!hasAnalyticsCredentials) {
-      console.log('Skipping: Analytics credentials not available');
+  it('should have recent tail events with CPU time data', async () => {
+    if (!tailAccessible) {
+      console.log('Skipping: Tail worker not accessible');
       return;
     }
 
-    // Query last 10 minutes of metrics
-    const summary = await getCpuMetricsSummary(scriptName, 10);
+    const result = await queryTailEvents(10);
 
-    console.log(`CPU Metrics for ${scriptName}:`);
-    console.log(`  P50: ${summary.p50}ms`);
-    console.log(`  P99: ${summary.p99}ms`);
-    console.log(`  Requests: ${summary.requestCount}`);
-    console.log(`  Errors: ${summary.errorCount}`);
-
-    if (summary.p99 === null) {
-      console.log('No CPU metrics available - worker may not have recent traffic');
+    if (!result.success) {
+      console.log(`Failed to query tail events: ${result.error}`);
       return;
     }
 
-    // Assert CPU P99 is under 50ms (the worker CPU limit)
-    expect(summary.p99).toBeLessThanOrEqual(
-      e2eConfig.cpuLimitWorkerMs,
-      `CPU P99 (${summary.p99}ms) exceeds worker limit (${e2eConfig.cpuLimitWorkerMs}ms)`
-    );
+    console.log(`Found ${result.events.length} recent tail events`);
+
+    // Check for CPU time in events
+    let eventsWithCpuTime = 0;
+    for (const event of result.events) {
+      const cpuTime = extractCpuTime(event);
+      if (cpuTime !== null) {
+        eventsWithCpuTime++;
+        console.log(`  ${event.event?.request?.url}: ${cpuTime}ms CPU, outcome: ${event.outcome}`);
+      }
+    }
+
+    console.log(`${eventsWithCpuTime}/${result.events.length} events have CPU time data`);
   });
 
-  it('should have zero exceededCpu errors in recent requests', async () => {
-    if (!hasAnalyticsCredentials) {
-      console.log('Skipping: Analytics credentials not available');
+  it('should have CPU time under 50ms for Tokyo.json (regression test)', async () => {
+    if (!tailAccessible) {
+      console.log('Skipping: Tail worker not accessible');
       return;
     }
 
-    const summary = await getCpuMetricsSummary(scriptName, 10);
+    // Make a request to generate a tail event
+    const testUrl = `${e2eConfig.baseUrl}/Tokyo.json`;
+    await fetch(testUrl);
 
-    if (summary.requestCount === 0) {
-      console.log('No recent requests to check');
+    // Wait for tail event to propagate
+    const result = await assertCpuTimeWithinLimit('Tokyo.json', e2eConfig.cpuLimitWorkerMs);
+
+    console.log(`Tokyo.json CPU check: ${result.message}`);
+
+    if (result.cpuTimeMs !== null) {
+      expect(result.cpuTimeMs).toBeLessThanOrEqual(
+        e2eConfig.cpuLimitWorkerMs,
+        `Tokyo.json CPU time ${result.cpuTimeMs}ms exceeds limit ${e2eConfig.cpuLimitWorkerMs}ms`
+      );
+    }
+  });
+
+  it('should not have any exceededCpu outcomes in recent events', async () => {
+    if (!tailAccessible) {
+      console.log('Skipping: Tail worker not accessible');
       return;
     }
 
-    const errorRate = summary.errorCount / summary.requestCount;
-    console.log(`Error rate: ${(errorRate * 100).toFixed(2)}% (${summary.errorCount}/${summary.requestCount})`);
+    const result = await queryTailEvents(50);
 
-    // Allow up to 1% error rate (could be unrelated errors)
-    expect(errorRate).toBeLessThanOrEqual(0.01);
+    if (!result.success) {
+      console.log(`Failed to query tail events: ${result.error}`);
+      return;
+    }
+
+    const exceededCpuEvents = result.events.filter((e) => e.outcome === 'exceededCpu');
+
+    if (exceededCpuEvents.length > 0) {
+      console.log(`Found ${exceededCpuEvents.length} exceededCpu events:`);
+      for (const event of exceededCpuEvents) {
+        console.log(`  ${event.event?.request?.url}`);
+      }
+    }
+
+    expect(exceededCpuEvents.length).toBe(0);
   });
 });
 

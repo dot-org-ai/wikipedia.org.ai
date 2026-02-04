@@ -42,11 +42,11 @@ export type {
 // =============================================================================
 
 /**
- * Default filter configuration - focuses on CPU and memory issues
+ * Default filter configuration - capture ALL events without filtering
+ * Full event objects are stored for debugging and CPU time analysis
  */
 export const DEFAULT_FILTER: TailEventFilter = {
-  outcomes: ['exceededCpu', 'exceededMemory', 'exception'],
-  logLevels: ['warn', 'error'],
+  // No filtering - capture everything
 }
 
 /**
@@ -467,71 +467,72 @@ export async function sendAlert(
  * @param config - Tail worker configuration
  * @returns Tail handler function
  */
+/**
+ * Store raw trace events to R2 - no filtering, keep all detail
+ */
+async function storeRawEventsInR2(
+  bucket: R2Bucket,
+  events: unknown[]
+): Promise<string> {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const key = `tail/${timestamp}.json`
+
+  await bucket.put(key, JSON.stringify(events, null, 2), {
+    httpMetadata: {
+      contentType: 'application/json',
+    },
+    customMetadata: {
+      eventCount: String(events.length),
+      createdAt: new Date().toISOString(),
+    },
+  })
+
+  return key
+}
+
 export function createTailHandler(config: TailWorkerConfig = DEFAULT_TAIL_CONFIG) {
-  const filter = config.filter ?? DEFAULT_FILTER
-  const batchConfig = config.batch ?? DEFAULT_BATCH_CONFIG
-
-  // Batch state is created once per handler instance
-  const batchState = createBatchState()
-
   return async function tail(events: unknown, env: TailWorkerEnv): Promise<void> {
-    // Validate input
-    const validItems = validateTraceItems(events)
-
-    if (validItems.length === 0) {
+    // Store raw events without filtering - we want ALL the detail
+    if (!Array.isArray(events) || events.length === 0) {
       return
     }
 
-    // Filter events for CPU/memory issues
-    const filteredEvents = filterTraceItems(validItems, filter)
+    // Log to console for real-time viewing via wrangler tail
+    console.log(`[tail] Received ${events.length} trace events`)
+    console.log(JSON.stringify(events, null, 2))
 
-    if (filteredEvents.length === 0) {
-      return
-    }
-
-    // Process events
-    const processedEvents = processTraceItems(filteredEvents)
-
-    // Log critical events immediately
-    for (const event of processedEvents) {
-      if (event.outcome === 'exceededCpu' || event.outcome === 'exceededMemory') {
-        console.warn(
-          `[tail] ${event.outcome}: ${event.scriptName} - ${event.url ?? 'unknown URL'}`
-        )
-      }
-    }
-
-    // Add to batch and check if we should flush
-    const toFlush = addToBatch(batchState, processedEvents, batchConfig)
-
-    if (toFlush.length === 0) {
-      return
-    }
-
-    // Store in R2
+    // Store raw events to R2 for later analysis
     if (config.enableR2Storage && env.LOGS_BUCKET) {
       try {
-        const key = await storeEventsInR2(env.LOGS_BUCKET, toFlush)
-        console.log(`[tail] Stored ${toFlush.length} events to R2: ${key}`)
+        const key = await storeRawEventsInR2(env.LOGS_BUCKET, events)
+        console.log(`[tail] Stored raw events to R2: ${key}`)
       } catch (error) {
         console.error('[tail] Failed to store events in R2:', error)
       }
     }
 
-    // Write to Analytics Engine
+    // Also write to Analytics Engine for metrics (processed summary)
     if (config.enableAnalytics && env.ANALYTICS) {
       try {
-        await writeToAnalytics(env.ANALYTICS, toFlush)
-        console.log(`[tail] Wrote ${toFlush.length} events to Analytics Engine`)
+        const validItems = validateTraceItems(events)
+        const processedEvents = processTraceItems(validItems)
+        await writeToAnalytics(env.ANALYTICS, processedEvents)
       } catch (error) {
         console.error('[tail] Failed to write to Analytics Engine:', error)
       }
     }
 
-    // Send alerts
+    // Alert on critical events
     if (config.enableAlerts && env.ALERT_WEBHOOK_URL) {
       try {
-        await sendAlert(env.ALERT_WEBHOOK_URL, toFlush)
+        const validItems = validateTraceItems(events)
+        const criticalEvents = validItems.filter(
+          (e) => e.outcome === 'exceededCpu' || e.outcome === 'exceededMemory'
+        )
+        if (criticalEvents.length > 0) {
+          const processedEvents = processTraceItems(criticalEvents)
+          await sendAlert(env.ALERT_WEBHOOK_URL, processedEvents)
+        }
       } catch (error) {
         console.error('[tail] Failed to send alert:', error)
       }
@@ -543,22 +544,121 @@ export function createTailHandler(config: TailWorkerConfig = DEFAULT_TAIL_CONFIG
 // Tail Worker Export
 // =============================================================================
 
-// Create handler once at module level to preserve batch state across invocations
+// Create handler once at module level
 const defaultHandler = createTailHandler(DEFAULT_TAIL_CONFIG)
+
+/**
+ * Query recent tail events from R2
+ */
+async function getRecentEvents(
+  bucket: R2Bucket,
+  limit: number = 10
+): Promise<unknown[]> {
+  // List recent log files
+  const listed = await bucket.list({
+    prefix: 'tail/',
+    limit,
+  })
+
+  const allEvents: unknown[] = []
+
+  // Sort by key (timestamp) descending and get most recent
+  const sortedObjects = listed.objects.sort((a, b) => b.key.localeCompare(a.key))
+
+  for (const obj of sortedObjects.slice(0, limit)) {
+    const object = await bucket.get(obj.key)
+    if (object) {
+      const text = await object.text()
+      try {
+        const events = JSON.parse(text)
+        if (Array.isArray(events)) {
+          allEvents.push(...events)
+        }
+      } catch {
+        // Skip malformed JSON
+      }
+    }
+  }
+
+  return allEvents
+}
 
 export default {
   /**
-   * Tail handler - processes events from the main Wikipedia API worker
-   *
-   * Monitors for:
-   * - exceededCpu outcomes
-   * - exceededMemory outcomes
-   * - Exceptions and errors
-   *
-   * @param events - Array of trace items from producer Workers
-   * @param env - Environment bindings
+   * Tail handler - stores ALL trace events without filtering
    */
   async tail(events: unknown, env: TailWorkerEnv): Promise<void> {
     await defaultHandler(events, env)
+  },
+
+  /**
+   * HTTP handler - query recent tail events for E2E tests
+   *
+   * GET /events?limit=10 - Get recent events
+   * GET /events?url=... - Filter by URL pattern
+   */
+  async fetch(request: Request, env: TailWorkerEnv): Promise<Response> {
+    const url = new URL(request.url)
+
+    // CORS headers
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    }
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders })
+    }
+
+    if (url.pathname === '/events' && env.LOGS_BUCKET) {
+      const limit = parseInt(url.searchParams.get('limit') || '10', 10)
+      const urlFilter = url.searchParams.get('url')
+
+      try {
+        let events = await getRecentEvents(env.LOGS_BUCKET, limit)
+
+        // Filter by URL if specified
+        if (urlFilter) {
+          events = events.filter((e: unknown) => {
+            if (typeof e === 'object' && e !== null) {
+              const event = e as Record<string, unknown>
+              const reqUrl = (event['event'] as Record<string, unknown>)?.['request'] as Record<string, unknown> | undefined
+              return reqUrl?.['url']?.toString().includes(urlFilter)
+            }
+            return false
+          })
+        }
+
+        return new Response(JSON.stringify(events, null, 2), {
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders,
+          },
+        })
+      } catch (error) {
+        return new Response(JSON.stringify({ error: String(error) }), {
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders,
+          },
+        })
+      }
+    }
+
+    return new Response(JSON.stringify({
+      service: 'wikipedia-tail',
+      endpoints: {
+        'GET /events': 'Get recent tail events',
+        'GET /events?limit=N': 'Limit number of events',
+        'GET /events?url=pattern': 'Filter by URL',
+      },
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    })
   },
 }
