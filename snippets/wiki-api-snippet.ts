@@ -1,13 +1,14 @@
 /**
  * Minimal Wikipedia API Snippet (<32KB)
  *
- * Uses Wikipedia's REST and Action APIs directly - no parsing needed.
- * Achieves <5ms CPU by delegating all parsing to Wikipedia's servers.
+ * Uses Wikipedia's REST and Action APIs directly where possible.
+ * Includes minimal infobox parsing for /infobox endpoint.
  *
  * Endpoints:
  *   /Title/summary -> Wikipedia REST API (0ms parse)
  *   /Title/links -> Wikipedia Action API (0ms parse)
  *   /Title/categories -> Wikipedia Action API (0ms parse)
+ *   /Title/infobox -> Fetch wikitext + parse infobox (~3-5ms)
  *   /Title -> Redirect to /Title/summary
  */
 
@@ -114,6 +115,134 @@ async function fetchCategories(title: string, lang: string): Promise<string[]> {
 }
 
 // ============================================================================
+// Infobox Parser (Minimal)
+// ============================================================================
+
+interface Infobox {
+  type: string
+  data: Record<string, string>
+}
+
+async function fetchWikitext(title: string, lang: string): Promise<string | null> {
+  try {
+    const params = new URLSearchParams({
+      action: 'query',
+      titles: title,
+      prop: 'revisions',
+      rvprop: 'content',
+      rvslots: 'main',
+      format: 'json',
+      formatversion: '2'
+    })
+
+    const url = `https://${lang}.wikipedia.org/w/api.php?${params}`
+    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } })
+    if (!res.ok) return null
+
+    const data = await res.json()
+    const page = data.query?.pages?.[0]
+    return page?.revisions?.[0]?.slots?.main?.content || null
+  } catch {
+    return null
+  }
+}
+
+function parseInfoboxes(wiki: string): Infobox[] {
+  const infoboxes: Infobox[] = []
+
+  // Find all {{Infobox ...}} templates
+  let depth = 0
+  let start = -1
+
+  for (let i = 0; i < wiki.length - 1; i++) {
+    if (wiki.charCodeAt(i) === 123 && wiki.charCodeAt(i + 1) === 123) { // {{
+      if (depth === 0) start = i
+      depth++
+      i++
+    } else if (wiki.charCodeAt(i) === 125 && wiki.charCodeAt(i + 1) === 125) { // }}
+      depth--
+      if (depth === 0 && start >= 0) {
+        const tmpl = wiki.slice(start + 2, i)
+
+        // Check if it's an infobox
+        const firstLine = tmpl.split(/[|\n]/)[0].trim().toLowerCase()
+        if (firstLine.startsWith('infobox') || firstLine.includes(' infobox')) {
+          const infobox = parseInfoboxContent(tmpl)
+          if (infobox) infoboxes.push(infobox)
+        }
+        start = -1
+      }
+      i++
+    }
+  }
+
+  return infoboxes
+}
+
+function parseInfoboxContent(tmpl: string): Infobox | null {
+  const lines = tmpl.split('\n')
+  const firstLine = lines[0].trim()
+
+  // Extract type from first line
+  let type = firstLine.replace(/^infobox\s*/i, '').trim()
+
+  // Parse key-value pairs
+  const data: Record<string, string> = {}
+  let currentKey = ''
+  let currentValue = ''
+  let depth = 0
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i]
+
+    // Track nested templates/links
+    for (const c of line) {
+      if (c === '{' || c === '[') depth++
+      else if (c === '}' || c === ']') depth--
+    }
+
+    // New parameter at depth 0
+    if (depth <= 0 && line.trim().startsWith('|')) {
+      // Save previous
+      if (currentKey) {
+        data[currentKey] = cleanValue(currentValue)
+      }
+
+      // Parse new key=value
+      const match = line.match(/^\s*\|\s*([^=]+?)\s*=\s*(.*)$/)
+      if (match) {
+        currentKey = match[1].trim().toLowerCase()
+        currentValue = match[2]
+      } else {
+        currentKey = ''
+        currentValue = ''
+      }
+      depth = 0
+    } else if (currentKey) {
+      // Continue current value
+      currentValue += '\n' + line
+    }
+  }
+
+  // Save last
+  if (currentKey) {
+    data[currentKey] = cleanValue(currentValue)
+  }
+
+  return { type, data }
+}
+
+function cleanValue(val: string): string {
+  return val
+    .replace(/\[\[(?:[^\]|]+\|)?([^\]]+)\]\]/g, '$1') // [[Link|Text]] -> Text
+    .replace(/\{\{[^}]+\}\}/g, '') // Remove templates
+    .replace(/<[^>]+>/g, '') // Remove HTML
+    .replace(/'{2,}/g, '') // Remove bold/italic
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// ============================================================================
 // Request Handlers
 // ============================================================================
 
@@ -171,6 +300,21 @@ async function handleCategories(title: string, lang: string): Promise<Response> 
   })
 }
 
+async function handleInfobox(title: string, lang: string): Promise<Response> {
+  const wikitext = await fetchWikitext(title, lang)
+
+  if (!wikitext) {
+    return json({ error: `Article not found: ${title}` }, 404)
+  }
+
+  const infoboxes = parseInfoboxes(wikitext)
+
+  return json({
+    title,
+    infoboxes
+  })
+}
+
 // ============================================================================
 // Response Helpers
 // ============================================================================
@@ -215,6 +359,7 @@ export default {
           '/Title/summary': 'Get article summary',
           '/Title/links': 'Get article links',
           '/Title/categories': 'Get article categories',
+          '/Title/infobox': 'Get article infobox data',
           '/lang/Title/summary': 'Get article in specific language'
         }
       })
@@ -235,6 +380,8 @@ export default {
         return handleLinks(title, lang)
       case 'categories':
         return handleCategories(title, lang)
+      case 'infobox':
+        return handleInfobox(title, lang)
       default:
         // Default to summary for unknown endpoints
         return handleSummary(title, lang)
