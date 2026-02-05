@@ -2,10 +2,11 @@
  * Optimized Wiki Parser Snippet for Cloudflare Snippets
  *
  * Production-ready Wikipedia parser using wtf-lite's fast mode:
- * - /Title/summary -> fastParse() + first 3 sentences (target: 2.5ms)
+ * - /Title/summary -> Wikipedia REST API (0ms parse CPU) with wtf-lite fallback
  * - /Title/text -> fastParse() + full text (target: 3ms)
  * - /Title/infobox -> regular parse with lazy options (target: 8ms)
- * - /Title/links -> links-only parse (target: 5ms)
+ * - /Title/links -> Wikipedia Action API (0ms parse CPU) with wtf-lite fallback
+ * - /Title/categories -> Wikipedia Action API (0ms parse CPU) with wtf-lite fallback
  * - /Title.json -> full parse (may exceed 5ms, that's ok)
  * - /Title -> markdown (cached)
  *
@@ -64,6 +65,62 @@ interface WikipediaApiResponse {
         }
       }>
     }>
+  }
+}
+
+interface WikipediaSummaryResponse {
+  title: string
+  displaytitle?: string
+  extract: string
+  extract_html?: string
+  description?: string
+  thumbnail?: {
+    source: string
+    width: number
+    height: number
+  }
+  originalimage?: {
+    source: string
+    width: number
+    height: number
+  }
+  wikibase_item?: string
+  pageid?: number
+  lang?: string
+  dir?: string
+  timestamp?: string
+  type?: string
+}
+
+interface WikipediaCategoriesResponse {
+  query?: {
+    pages?: Array<{
+      pageid?: number
+      title: string
+      missing?: boolean
+      categories?: Array<{
+        ns: number
+        title: string
+      }>
+    }>
+  }
+}
+
+interface WikipediaLinksApiResponse {
+  query?: {
+    pages?: Array<{
+      pageid?: number
+      title: string
+      missing?: boolean
+      links?: Array<{
+        ns: number
+        title: string
+      }>
+    }>
+  }
+  continue?: {
+    plcontinue?: string
+    continue?: string
   }
 }
 
@@ -133,7 +190,7 @@ async function routeEndpoint(
 
   // Fast mode endpoints (no template parsing needed)
   if (endpoint === 'summary') {
-    return handleSummary(article, startTime)
+    return handleSummary(article, parsed.lang, startTime)
   }
 
   if (endpoint === 'text') {
@@ -152,11 +209,11 @@ async function routeEndpoint(
   }
 
   if (endpoint === 'links') {
-    return handleLinks(article, startTime)
+    return handleLinks(article, parsed.lang, startTime)
   }
 
   if (endpoint === 'categories') {
-    return handleCategories(article, startTime)
+    return handleCategories(article, parsed.lang, startTime)
   }
 
   if (endpoint === 'references') {
@@ -198,14 +255,63 @@ async function handlePost(request: Request, startTime: number): Promise<Response
 }
 
 /**
- * /Title/summary - Fast parse, first 3 sentences
- * Target: 2.5ms CPU (measured via Cloudflare tail events, not in-worker timing)
- *
- * NOTE: Cloudflare Workers freeze timers during execution (security feature),
- * so we cannot measure CPU time from inside the worker. Use `wrangler tail`
- * or Cloudflare Analytics to see actual CPU time.
+ * Fetch pre-computed summary from Wikipedia REST API
+ * Returns null if the API fails or article not found
  */
-function handleSummary(article: { title: string; wikitext: string }, requestStart: number): Response {
+async function fetchWikipediaSummary(
+  title: string,
+  lang: string
+): Promise<WikipediaSummaryResponse | null> {
+  const encodedTitle = encodeURIComponent(title.replace(/ /g, '_'))
+  const apiUrl = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`
+
+  try {
+    const response = await fetch(apiUrl, {
+      headers: {
+        'User-Agent': 'wiki.org.ai/1.0 (optimized-snippet)',
+        'Accept': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      return null
+    }
+
+    return await response.json() as WikipediaSummaryResponse
+  } catch {
+    return null
+  }
+}
+
+/**
+ * /Title/summary - Use Wikipedia's pre-computed summary endpoint
+ * Target: 0ms parsing CPU (summary is pre-computed by Wikipedia)
+ *
+ * First tries Wikipedia's REST API for pre-computed summaries.
+ * Falls back to wtf-lite parsing if the API fails.
+ */
+async function handleSummary(
+  article: { title: string; wikitext: string },
+  lang: string,
+  requestStart: number
+): Promise<Response> {
+  // Try Wikipedia's REST API first (0ms parsing CPU)
+  const wikiSummary = await fetchWikipediaSummary(article.title, lang)
+
+  if (wikiSummary) {
+    const result = {
+      title: wikiSummary.title,
+      summary: wikiSummary.extract,
+      description: wikiSummary.description || null,
+      thumbnail: wikiSummary.thumbnail?.source || null,
+      wikibase_item: wikiSummary.wikibase_item || null,
+      source: 'wikipedia-rest-api',
+    }
+
+    return jsonResponse(result, requestStart, 'api', 0)
+  }
+
+  // Fallback: Use wtf-lite parsing if REST API fails
   const doc = fastParse(article.wikitext, { title: article.title })
 
   // Get first 3 sentences from intro section
@@ -215,8 +321,12 @@ function handleSummary(article: { title: string; wikitext: string }, requestStar
   const result = {
     title: doc.title || article.title,
     summary: sentences.join(' '),
+    description: null,
+    thumbnail: null,
+    wikibase_item: null,
     isRedirect: doc.isRedirect,
     redirectTo: doc.redirectTo,
+    source: 'wtf-lite-fallback',
   }
 
   return jsonResponse(result, requestStart, 'fast')
@@ -259,12 +369,39 @@ function handleInfobox(article: { title: string; wikitext: string }, requestStar
 }
 
 /**
- * /Title/links - Regular parse, links only
- * Target: 5ms CPU
+ * /Title/links - Use Wikipedia's Action API for pre-computed links (0ms parse CPU)
+ * Falls back to wtf-lite parsing if API fails
  */
-function handleLinks(article: { title: string; wikitext: string }, requestStart: number): Response {
+async function handleLinks(
+  article: { title: string; wikitext: string },
+  lang: string,
+  requestStart: number
+): Promise<Response> {
+  // Try Wikipedia's Action API first (0ms parse CPU - pre-computed)
+  try {
+    const apiLinks = await fetchLinksFromApi(article.title, lang)
+    if (apiLinks !== null) {
+      // Map to our output format { page, text }
+      const links = apiLinks.slice(0, 100).map(link => ({
+        page: link.title,
+        text: link.title,
+      }))
+
+      return jsonResponse({
+        title: article.title,
+        links,
+        totalLinks: apiLinks.length,
+        isRedirect: false,
+        redirectTo: null,
+        source: 'api',
+      }, requestStart, 'api', 0)
+    }
+  } catch {
+    // Fall through to parsing fallback
+  }
+
+  // Fallback: parse wikitext with wtf-lite
   const parseStart = performance.now()
-  // Use specialized fast parser for links
   const result = parseLinksOnly(article.wikitext, { title: article.title })
   const parseTime = performance.now() - parseStart
 
@@ -277,15 +414,96 @@ function handleLinks(article: { title: string; wikitext: string }, requestStart:
     totalLinks: result.links.length,
     isRedirect: result.isRedirect,
     redirectTo: result.redirectTo,
+    source: 'parse',
   }, requestStart, 'fast', parseTime)
 }
 
 /**
- * /Title/categories - Fast parse is sufficient
+ * Fetch links from Wikipedia's Action API
+ * Returns pre-computed links with 0ms parse CPU
+ * Handles pagination (plcontinue) for articles with many links
  */
-function handleCategories(article: { title: string; wikitext: string }, requestStart: number): Response {
+async function fetchLinksFromApi(
+  title: string,
+  lang: string
+): Promise<Array<{ ns: number; title: string }> | null> {
+  const apiUrl = `https://${lang}.wikipedia.org/w/api.php`
+  const allLinks: Array<{ ns: number; title: string }> = []
+  let plcontinue: string | undefined
+
+  // Paginate through results (max 500 per request)
+  do {
+    const params = new URLSearchParams({
+      action: 'query',
+      titles: title,
+      prop: 'links',
+      pllimit: '500',
+      plnamespace: '0', // Main namespace only (articles)
+      format: 'json',
+      formatversion: '2',
+    })
+
+    if (plcontinue) {
+      params.set('plcontinue', plcontinue)
+    }
+
+    const response = await fetch(`${apiUrl}?${params}`, {
+      headers: { 'User-Agent': 'wiki.org.ai/1.0 (optimized-snippet)' },
+    })
+
+    if (!response.ok) {
+      return null
+    }
+
+    const data = await response.json() as WikipediaLinksApiResponse
+    const page = data.query?.pages?.[0]
+
+    if (!page || page.missing) {
+      return null
+    }
+
+    // Collect links from this page
+    if (page.links) {
+      allLinks.push(...page.links)
+    }
+
+    // Check for continuation
+    plcontinue = data.continue?.plcontinue
+
+    // Safety limit: don't fetch more than 2000 links total
+    if (allLinks.length >= 2000) {
+      break
+    }
+  } while (plcontinue)
+
+  return allLinks
+}
+
+/**
+ * /Title/categories - Use Wikipedia's Action API for pre-computed categories (0ms parse CPU)
+ * Falls back to wtf-lite parsing if API fails
+ */
+async function handleCategories(
+  article: { title: string; wikitext: string },
+  lang: string,
+  requestStart: number
+): Promise<Response> {
+  // Try Wikipedia's Action API first (0ms parse CPU - pre-computed)
+  try {
+    const categories = await fetchCategoriesFromApi(article.title, lang)
+    if (categories !== null) {
+      return jsonResponse({
+        title: article.title,
+        categories,
+        source: 'api',
+      }, requestStart, 'api', 0)
+    }
+  } catch {
+    // Fall through to parsing fallback
+  }
+
+  // Fallback: parse wikitext with wtf-lite
   const parseStart = performance.now()
-  // Use specialized fast parser for categories
   const result = parseCategoriesOnly(article.wikitext, { title: article.title })
   const parseTime = performance.now() - parseStart
 
@@ -293,7 +511,49 @@ function handleCategories(article: { title: string; wikitext: string }, requestS
     title: result.title || article.title,
     categories: result.categories,
     isRedirect: result.isRedirect,
+    source: 'parse',
   }, requestStart, 'fast', parseTime)
+}
+
+/**
+ * Fetch categories from Wikipedia's Action API
+ * Returns pre-computed categories with 0ms parse CPU
+ */
+async function fetchCategoriesFromApi(
+  title: string,
+  lang: string
+): Promise<string[] | null> {
+  const apiUrl = `https://${lang}.wikipedia.org/w/api.php`
+  const params = new URLSearchParams({
+    action: 'query',
+    titles: title,
+    prop: 'categories',
+    cllimit: '500',
+    format: 'json',
+    formatversion: '2',
+  })
+
+  const response = await fetch(`${apiUrl}?${params}`, {
+    headers: { 'User-Agent': 'wiki.org.ai/1.0 (optimized-snippet)' },
+  })
+
+  if (!response.ok) {
+    return null
+  }
+
+  const data = await response.json() as WikipediaCategoriesResponse
+  const page = data.query?.pages?.[0]
+
+  if (!page || page.missing || !page.categories) {
+    return null
+  }
+
+  // Strip "Category:" prefix from each category title
+  // Handle different language prefixes (e.g., "Category:", "Kategorie:", "Catégorie:")
+  return page.categories.map(cat => {
+    const colonIndex = cat.title.indexOf(':')
+    return colonIndex !== -1 ? cat.title.slice(colonIndex + 1) : cat.title
+  })
 }
 
 /**
@@ -532,7 +792,7 @@ function extractSentences(text: string, n: number): string[] {
 function jsonResponse(
   data: object,
   startTime: number,
-  mode: 'fast' | 'full',
+  mode: 'fast' | 'full' | 'api',
   parseTime?: number
 ): Response {
   return Response.json(data, {
@@ -584,22 +844,23 @@ function apiInfo(startTime: number): Response {
     endpoints: {
       '/Title': 'Get article as Markdown (fast mode)',
       '/Title.json': 'Get full article as JSON (full mode)',
-      '/Title/summary': 'Get first 3 sentences (fast mode, 2.5ms)',
+      '/Title/summary': 'Get summary via Wikipedia REST API (0ms parse CPU)',
       '/Title/text': 'Get plain text (fast mode, 3ms)',
       '/Title/infobox': 'Get infobox data (full mode, 8ms)',
-      '/Title/links': 'Get links (full mode, 5ms)',
-      '/Title/categories': 'Get categories (fast mode)',
+      '/Title/links': 'Get links via Wikipedia API (0ms parse CPU)',
+      '/Title/categories': 'Get categories via Wikipedia API (0ms parse CPU)',
       '/Title/references': 'Get references (full mode)',
       '/fr/Paris': 'French Wikipedia article',
       'POST /': 'Parse raw wikitext (mode: fast|full)',
     },
     modes: {
+      api: 'Pre-computed data from Wikipedia APIs (0ms parse CPU)',
       fast: 'Text extraction only - no template parsing (2-3ms)',
       full: 'Complete parsing with templates, infoboxes, links (5-15ms)',
     },
     headers: {
-      'X-Parse-Mode': 'fast or full',
-      'X-CPU-Time-Ms': 'CPU time in milliseconds',
+      'X-Parse-Mode': 'api, fast, or full',
+      'X-Parse-Time-Ms': 'Parse time in milliseconds (0 for api mode)',
       'Server-Timing': 'Standard timing header for analytics',
     },
     caching: {

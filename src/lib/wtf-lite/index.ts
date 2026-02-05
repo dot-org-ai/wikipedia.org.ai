@@ -53,7 +53,7 @@ export { Table } from './table.js'
 export { Reference } from './reference.js'
 
 // Fast mode for snippets (5ms CPU limit)
-export { fastParse, parseSummary, parseInfoboxOnly, parseLinksOnly, parseCategoriesOnly } from './fast.js'
+export { fastParse, parseSummary, parseSummaryBounded, parseInfoboxOnly, parseLinksOnly, parseCategoriesOnly, extractShortDescription } from './fast.js'
 export type { FastDocument, FastLink, FastInfobox, SummaryResult, InfoboxResult, LinksResult, CategoriesResult } from './fast.js'
 
 // Single-pass scanner (experimental - for advanced use)
