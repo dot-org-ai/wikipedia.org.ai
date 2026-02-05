@@ -17,8 +17,11 @@ main = "wiki-parser-optimized.ts"
 compatibility_date = "2024-12-01"
 account_id = "b6641681fe423910342b9ffa1364c76d"
 
-# Routes - can be deployed alongside wiki-parser for A/B testing
+# Routes - deployed on api.wikipedia.org.ai for A/B testing vs main worker
+# Main worker (50ms limit): wikipedia.org.ai/*
+# Optimized snippet (5ms limit): api.wikipedia.org.ai/*
 routes = [
+  { pattern = "api.wikipedia.org.ai/*", zone_name = "wikipedia.org.ai" },
   { pattern = "wiki-optimized.workers.do/*", zone_name = "workers.do" }
 ]
 
